@@ -131,32 +131,30 @@
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
-       <widget class="QCheckBox" name="rigidCheckBox">
+       <widget class="QLabel" name="label">
         <property name="text">
-         <string>Rigid</string>
-        </property>
-        <property name="tristate">
-         <bool>true</bool>
+         <string>Steps: </string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QCheckBox" name="affineCheckBox">
+       <widget class="QRadioButton" name="radioButton">
         <property name="text">
          <string>Affine</string>
         </property>
-        <property name="tristate">
-         <bool>true</bool>
+       </widget>
+      </item>
+      <item>
+       <widget class="QRadioButton" name="radioButton_2">
+        <property name="text">
+         <string>Deformable</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QCheckBox" name="deformableCheckBox">
+       <widget class="QRadioButton" name="radioButton_3">
         <property name="text">
-         <string>Deformable</string>
-        </property>
-        <property name="tristate">
-         <bool>true</bool>
+         <string>Both</string>
         </property>
        </widget>
       </item>
