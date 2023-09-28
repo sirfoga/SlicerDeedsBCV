@@ -1,33 +1,18 @@
 import slicer
 from slicer.ScriptedLoadableModule import *
+from slicer.util import VTKObservationMixin
 
-from logic import Logic
+from src.logic import deedsBCVLogic as Logic
 
 
-class AbstractWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
-    def __init__(self, parent=None) -> None:
-        ScriptedLoadableModuleWidget.__init__(self, parent)
-        VTKObservationMixin.__init__(self)  # needed for parameter node observation
-
+class AbstractRegistrationWidget():
+    def __init__(self) -> None:
         self.logic = None
         self.ui = None
 
         self._parameterNode = None
         self._parameterNodeGuiTag = None
         self._updatingGUIFromParameterNode = False
-
-    def setup(self) -> None:
-        """
-        Called when the user opens the module the first time and the widget is initialized.
-        """
-        ScriptedLoadableModuleWidget.setup(self)
-
-        self._setupLogic()
-        self._setupUI()
-        self._setupConnections()
-
-        # Make sure parameter node is initialized (needed for module reload)
-        self.initializeParameterNode()
 
     def cleanup(self) -> None:
         """
@@ -78,18 +63,12 @@ class AbstractWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.setParameterNode(self.logic.getParameterNode())
 
-        # Select default input nodes if nothing is selected yet to save a few clicks for the user
-        if not self._parameterNode.inputVolume:
-            firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-            if firstVolumeNode:
-                self._parameterNode.inputVolume = firstVolumeNode
-
     def addLog(self, text):
         self.ui.statusLabel.appendPlainText(text)
         slicer.app.processEvents()  # force update
 
 
-class Widget(AbstractRegistrationWidget):
+class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, AbstractRegistrationWidget):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -99,9 +78,24 @@ class Widget(AbstractRegistrationWidget):
         Called when the user opens the module the first time and the widget is initialized.
         """
 
-        super().__init__(self, parent)
+        ScriptedLoadableModuleWidget.__init__(self, parent)
+        VTKObservationMixin.__init__(self)  # needed for parameter node observation
+        AbstractRegistrationWidget.__init__(self)  # boilerplate
 
         self.registrationInProgress = False
+
+    def setup(self) -> None:
+        """
+        Called when the user opens the module the first time and the widget is initialized.
+        """
+        ScriptedLoadableModuleWidget.setup(self)
+
+        self._setupLogic()
+        self._setupUI()
+        self._setupConnections()
+
+        # Make sure parameter node is initialized (needed for module reload)
+        self.initializeParameterNode()
 
     def _setupLogic(self) -> None:
         self.logic = Logic()
@@ -129,24 +123,57 @@ class Widget(AbstractRegistrationWidget):
         Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
         """
 
-        if self._parameterNode:
-            self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
-        self._parameterNode = inputParameterNode
-        if self._parameterNode:
-            # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
-            # ui element that needs connection.
-            self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
-            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
-            self._checkCanApply()
+        if inputParameterNode:
+            pass  # self.logic.setDefaultParameters(inputParameterNode)
 
-    def _checkCanApply(self, caller=None, event=None) -> None:
-        if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.thresholdedVolume:
-            self.ui.applyButton.toolTip = "Compute output volume"
-            self.ui.applyButton.enabled = True
-        else:
-            self.ui.applyButton.toolTip = "Select input and output volume nodes"
-            self.ui.applyButton.enabled = False
+        # Unobserve previously selected parameter node and add an observer to the newly selected.
+        # Changes of parameter node are observed so that whenever parameters are changed by a script or any other module
+        # those are reflected immediately in the GUI.
+        if self._parameterNode is not None and self.hasObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode):
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+            self._parameterNode = inputParameterNode
+
+        if self._parameterNode is not None:
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+
+            wasBlocked = self.ui.parameterNodeSelector.blockSignals(True)
+            self.ui.parameterNodeSelector.setCurrentNode(self._parameterNode)
+            self.ui.parameterNodeSelector.blockSignals(wasBlocked)
+
+        # Initial GUI update
+        self.updateGUIFromParameterNode()
+
+    def updateGUIFromParameterNode(self, caller=None, event=None):
+        """
+        This method is called whenever parameter node is changed.
+        The module GUI is updated to show the current state of the parameter node.
+        """
+        if self._parameterNode is None or self._updatingGUIFromParameterNode:
+            return
+
+        # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
+        self._updatingGUIFromParameterNode = True
+
+        # self.ui.fixedVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.FIXED_VOLUME_REF))
+        # self.ui.movingVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.MOVING_VOLUME_REF))
+        # self.ui.fixedVolumeMaskSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.FIXED_VOLUME_MASK_REF))
+        # self.ui.movingVolumeMaskSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.MOVING_VOLUME_MASK_REF))
+        # self.ui.initialTransformSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.INITIAL_TRANSFORM_REF))
+
+        # self.ui.outputVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.OUTPUT_VOLUME_REF))
+        # self.ui.outputTransformSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.OUTPUT_TRANSFORM_REF))
+
+        # self.ui.forceDisplacementFieldOutputCheckbox.checked = \
+        #     slicer.util.toBool(self._parameterNode.GetParameter(self.logic.FORCE_GRID_TRANSFORM_PARAM))
+
+        # registrationPresetIndex = \
+        #     self.logic.getRegistrationIndexByPresetId(self._parameterNode.GetParameter(self.logic.REGISTRATION_PRESET_ID_PARAM))
+        # self.ui.registrationPresetSelector.setCurrentIndex(registrationPresetIndex)
+
+        self.updateApplyButtonState()
+
+        # All the GUI updates are done
+        self._updatingGUIFromParameterNode = False
 
     def onApplyButton(self) -> None:
         """

@@ -17,9 +17,7 @@ from slicer.parameterNodeWrapper import (
 
 from slicer import vtkMRMLScalarVolumeNode
 
-from logic import Logic as deedsBCVLogic
-from widget import Widget as deedsBCVWidget
-from tests import Test as deedsBCVTest
+from src.widget import deedsBCVWidget  # else 'Warning, there is no UI for the module "deedsBCV"' ..
 
 
 class deedsBCV(ScriptedLoadableModule):
@@ -40,4 +38,4 @@ class deedsBCV(ScriptedLoadableModule):
         self.parent.acknowledgementText = """Grazie mamma"""
 
         # Additional initialization step after application startup is complete
-        slicer.app.connect("startupCompleted()", registerSampleData)
+        #slicer.app.connect("startupCompleted()", registerSampleData)

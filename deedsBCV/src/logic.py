@@ -1,11 +1,22 @@
 import os
+import platform
+
 import slicer
 from slicer.ScriptedLoadableModule import *
 
-from utils import createDirectory
+from src.utils import createDirectory
 
 
-class Logic(ScriptedLoadableModuleLogic):
+def exportNode(node, folder, filename):
+    """ todo in nii.gz! """
+
+    filePath = os.path.join(folder, filename)
+    slicer.util.exportNode(node, filePath)
+
+    return filePath
+
+
+class deedsBCVLogic(ScriptedLoadableModuleLogic):
     """This class should implement all the actual
     computation done by your module.  The interface
     should be such that other python code can import
@@ -66,8 +77,8 @@ class Logic(ScriptedLoadableModuleLogic):
             os.path.join(self.scriptPath, '../../../../bin/MinSizeRel') ]
 
         for candidate in candidates:
-            file_exists = os.path.isfile(os.path.join(candidate, self.linearExeFilename))
-            if file_exists:  # found it!
+            candidate_path = os.path.join(candidate, self.linearExeFilename)
+            if os.path.isfile(candidate_path):
                 return os.path.abspath(candidate)
 
         raise ValueError('Elastix not found')
@@ -87,8 +98,12 @@ class Logic(ScriptedLoadableModuleLogic):
 
     def runExec(self, cmdLineArguments):
         self.addLog("Register volumes...")
-        executableFilePath = os.path.join(self.getBinDir(), self.linearExeFilename)  # todo also deformable
-        logging.info(f"Register volumes using: {executableFilePath}: {cmdLineArguments!r}")
+
+        executableFilePath = os.path.join(
+            self.getBinDir(),
+            self.linearExeFilename
+        )  # todo also deformable
+        logging.info(f"Running exe using: {executableFilePath}: {cmdLineArguments!r}")
         return self._createSubProcess(executableFilePath, cmdLineArguments)
 
     def _createSubProcess(self, executableFilePath, cmdLineArguments):
@@ -154,9 +169,6 @@ class Logic(ScriptedLoadableModuleLogic):
         fileInfo = qt.QFileInfo(qt.QDir(tempDir), "Deeds")
         return createDirectory(fileInfo.absoluteFilePath())
 
-    # todo needed def getParameterNode(self):
-    #     return deedsBCVParameterNode(super().getParameterNode())
-
     def processParameterNode(self, parameterNode, deleteTemporaryFiles, logToStdout):
         # todo get more options from `parameterNode`
 
@@ -206,17 +218,21 @@ class Logic(ScriptedLoadableModuleLogic):
         """
 
         self.isRunning = True
-        tempDir = self.createTempDirectory()
+        tempDir = self._createTempDirectory()
         self.addLog(f'Registration is started in working directory: {tempDir}')
 
         try:
             self.cancelRequested = False
-            self._processOrExcept(
-                tempDir,
-                fixedVolumeNode,
-                movingVolumeNode,
-                logToStdout
-            )
+
+            print('self._processOrExcept')
+
+            if False:
+                self._processOrExcept(
+                    tempDir,
+                    fixedVolumeNode,
+                    movingVolumeNode,
+                    logToStdout
+                )
         finally:  # Clean up
             if deleteTemporaryFiles:
                 shutil.rmtree(tempDir)
@@ -226,12 +242,14 @@ class Logic(ScriptedLoadableModuleLogic):
 
     def _addInputVolumes(self, inputDir, inputVolumes):
         params = []
-        for volumeNode, filename, paramName in inputVolumes:
-            if not volumeNode:
+
+        for node, filename, paramName in inputVolumes:
+            if not node:  # node is not present in scene
                 continue
-            filePath = os.path.join(inputDir, filename)
-            slicer.util.exportNode(volumeNode, filePath)  # todo in nii.gz!
+
+            filePath = exportNode(node, inputDir, filename)
             params += [paramName, filePath]
+
         return params
 
     def _process_outputs(self,
