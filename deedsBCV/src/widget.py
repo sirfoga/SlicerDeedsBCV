@@ -1,3 +1,4 @@
+import vtk
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -113,9 +114,14 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-        #todo more connections
-
         self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
+
+        # inputs
+        self.ui.fixedVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
+        self.ui.movingVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
+
+        # outputs
+        self.ui.outputVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
 
     def setParameterNode(self, inputParameterNode):
         """
@@ -124,21 +130,18 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         """
 
         if inputParameterNode:
-            pass  # self.logic.setDefaultParameters(inputParameterNode)
+            self.logic.setDefaultParameters(inputParameterNode)
 
         # Unobserve previously selected parameter node and add an observer to the newly selected.
         # Changes of parameter node are observed so that whenever parameters are changed by a script or any other module
         # those are reflected immediately in the GUI.
         if self._parameterNode is not None and self.hasObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode):
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
-            self._parameterNode = inputParameterNode
+
+        self._parameterNode = inputParameterNode
 
         if self._parameterNode is not None:
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
-
-            wasBlocked = self.ui.parameterNodeSelector.blockSignals(True)
-            self.ui.parameterNodeSelector.setCurrentNode(self._parameterNode)
-            self.ui.parameterNodeSelector.blockSignals(wasBlocked)
 
         # Initial GUI update
         self.updateGUIFromParameterNode()
@@ -148,32 +151,42 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         This method is called whenever parameter node is changed.
         The module GUI is updated to show the current state of the parameter node.
         """
+
         if self._parameterNode is None or self._updatingGUIFromParameterNode:
             return
 
         # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
         self._updatingGUIFromParameterNode = True
 
-        # self.ui.fixedVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.FIXED_VOLUME_REF))
-        # self.ui.movingVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.MOVING_VOLUME_REF))
-        # self.ui.fixedVolumeMaskSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.FIXED_VOLUME_MASK_REF))
-        # self.ui.movingVolumeMaskSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.MOVING_VOLUME_MASK_REF))
-        # self.ui.initialTransformSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.INITIAL_TRANSFORM_REF))
-
-        # self.ui.outputVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.OUTPUT_VOLUME_REF))
-        # self.ui.outputTransformSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.OUTPUT_TRANSFORM_REF))
-
-        # self.ui.forceDisplacementFieldOutputCheckbox.checked = \
-        #     slicer.util.toBool(self._parameterNode.GetParameter(self.logic.FORCE_GRID_TRANSFORM_PARAM))
-
-        # registrationPresetIndex = \
-        #     self.logic.getRegistrationIndexByPresetId(self._parameterNode.GetParameter(self.logic.REGISTRATION_PRESET_ID_PARAM))
-        # self.ui.registrationPresetSelector.setCurrentIndex(registrationPresetIndex)
+        self.ui.fixedVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.FIXED_VOLUME_REF))
+        self.ui.movingVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.MOVING_VOLUME_REF))
 
         self.updateApplyButtonState()
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
+
+    def updateParameterNodeFromGUI(self, caller=None, event=None):
+        """
+        This method is called when the user makes any change in the GUI.
+        The changes are saved into the parameter node (so that they are restored when the scene is saved and loaded).
+        """
+
+        if self._parameterNode is None or self._updatingGUIFromParameterNode:
+            return
+
+        wasModified = self._parameterNode.StartModify()    # Modify all properties in a single batch
+
+        # inputs
+        self._parameterNode.SetNodeReferenceID(self.logic.FIXED_VOLUME_REF, self.ui.fixedVolumeSelector.currentNodeID)
+        self._parameterNode.SetNodeReferenceID(self.logic.MOVING_VOLUME_REF, self.ui.movingVolumeSelector.currentNodeID)
+
+        # todo other params
+
+        # outputs
+        self._parameterNode.SetNodeReferenceID(self.logic.OUTPUT_VOLUME_REF, self.ui.outputVolumeSelector.currentNodeID)
+
+        self._parameterNode.EndModify(wasModified)
 
     def onApplyButton(self) -> None:
         """
@@ -201,18 +214,16 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
     def runLogicOrExcept(self):
         self.logic.processParameterNode(
             self._parameterNode,
-            deleteTemporaryFiles=not self.ui.keepTemporaryFilesCheckBox.checked,
-            logToStdout=self.ui.showDetailedLogDuringExecutionCheckBox.checked
+            deleteTemporaryFiles=False,
+            logToStdout=True
         )
 
     def onLogicSuccess(self):
         """ Apply computed transform to moving volume if output transform is computed to immediately see registration results """
 
         movingVolumeNode = self.ui.movingVolumeSelector.currentNode()
-        if self.ui.outputTransformSelector.currentNode() is not None \
-            and movingVolumeNode is not None \
-            and self.ui.outputVolumeSelector.currentNode() is None:
-            movingVolumeNode.SetAndObserveTransformNodeID(self.ui.outputTransformSelector.currentNode().GetID())
+        # todo get ouput (moved) from logic and display
+        # get affine (rigid) (+ deformable) trans from logic and save in the Save folder
 
     def updateApplyButtonState(self):
         if self.registrationInProgress or self.logic.isRunning:
@@ -226,16 +237,17 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
             fixedVolumeNode = self._parameterNode.GetNodeReference(self.logic.FIXED_VOLUME_REF)
             movingVolumeNode = self._parameterNode.GetNodeReference(self.logic.MOVING_VOLUME_REF)
             outputVolumeNode = self._parameterNode.GetNodeReference(self.logic.OUTPUT_VOLUME_REF)
-            outputTransformNode = self._parameterNode.GetNodeReference(self.logic.OUTPUT_TRANSFORM_REF)
+
             if not fixedVolumeNode or not movingVolumeNode:
                 self.ui.applyButton.text = "Select fixed and moving volumes"
                 self.ui.applyButton.enabled = False
             elif fixedVolumeNode == movingVolumeNode:
                 self.ui.applyButton.text = "Fixed and moving volume must not be the same"
                 self.ui.applyButton.enabled = False
-            elif not outputVolumeNode and not outputTransformNode:
-                self.ui.applyButton.text = "Select an output volume and/or output transform"
+            elif not outputVolumeNode:
+                self.ui.applyButton.text = "Select an output volume"
                 self.ui.applyButton.enabled = False
+            # todo check pipeline steps
             else:
                 self.ui.applyButton.text = "Apply"
                 self.ui.applyButton.enabled = True

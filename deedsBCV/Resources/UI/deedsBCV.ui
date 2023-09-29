@@ -131,13 +131,6 @@
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Steps: </string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QRadioButton" name="radioButton">
         <property name="text">
          <string>Affine</string>
@@ -259,13 +252,6 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="label_8">
-        <property name="text">
-         <string>Output transform: </string>
-        </property>
-       </widget>
-      </item>
       <item row="0" column="1">
        <widget class="qMRMLNodeComboBox" name="outputVolumeSelector">
         <property name="toolTip">
@@ -278,30 +264,6 @@
         </property>
         <property name="showChildNodeTypes">
          <bool>false</bool>
-        </property>
-        <property name="hideChildNodeTypes">
-         <stringlist notr="true"/>
-        </property>
-        <property name="noneEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="interactionNodeSingletonTag">
-         <string notr="true"/>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="qMRMLNodeComboBox" name="outputTransformSelector">
-        <property name="toolTip">
-         <string>(optional) Computed displacement field that transform nodes from moving volume space to fixed volume space. NOTE: You must set at least one output object (transform and/or output volume).</string>
-        </property>
-        <property name="nodeTypes">
-         <stringlist notr="true">
-          <string>vtkMRMLTransformNode</string>
-         </stringlist>
         </property>
         <property name="hideChildNodeTypes">
          <stringlist notr="true"/>
@@ -423,22 +385,6 @@
     <hint type="destinationlabel">
      <x>365</x>
      <y>131</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>deedsBCV</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>outputTransformSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>314</x>
-     <y>381</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>372</x>
-     <y>285</y>
     </hint>
    </hints>
   </connection>

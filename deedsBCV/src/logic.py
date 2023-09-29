@@ -1,10 +1,12 @@
 import os
 import platform
+import logging
+import shutil
 
 import slicer
 from slicer.ScriptedLoadableModule import *
 
-from src.utils import createDirectory
+from src.utils import createTempDirectory
 
 
 def exportNode(node, folder, filename):
@@ -50,8 +52,18 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         self.linearExeFilename = 'linear' + executableExt
         #todo deformable
 
-    # todo def setDefaultParameters(self, parameterNode):
-    # do we need it? Defaults are init by .ui
+    def setDefaultParameters(self, parameterNode):
+        """
+        Initialize parameter node with default settings.
+        """
+
+        print('debug only', parameterNode)
+
+        # if not parameterNode.GetParameter(self.FORCE_GRID_TRANSFORM_PARAM):
+        #     parameterNode.SetParameter(self.FORCE_GRID_TRANSFORM_PARAM, "False")
+
+        # if not parameterNode.GetParameter(self.REGISTRATION_PRESET_ID_PARAM):
+        #     parameterNode.SetParameter(self.REGISTRATION_PRESET_ID_PARAM, self.DEFAULT_PRESET_ID)
 
     def addLog(self, text):
         logging.info(text)
@@ -158,24 +170,13 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 self.addLog(processOutput)
             raise subprocess.CalledProcessError(return_code, "deeds")
 
-    def _createTempDirectory(self):
-        tempDir = qt.QDir(self.getTempDirectoryBase())
-        tempDirName = qt.QDateTime().currentDateTime().toString("yyyyMMdd_hhmmss_zzz")
-        fileInfo = qt.QFileInfo(qt.QDir(tempDir), tempDirName)
-        return createDirectory(fileInfo.absoluteFilePath())
-
-    def _getTempDirectoryBase(self):
-        tempDir = qt.QDir(slicer.app.temporaryPath)
-        fileInfo = qt.QFileInfo(qt.QDir(tempDir), "Deeds")
-        return createDirectory(fileInfo.absoluteFilePath())
-
     def processParameterNode(self, parameterNode, deleteTemporaryFiles, logToStdout):
         # todo get more options from `parameterNode`
 
         fixedVolumeNode = parameterNode.GetNodeReference(self.FIXED_VOLUME_REF)
         movingVolumeNode = parameterNode.GetNodeReference(self.MOVING_VOLUME_REF)
 
-        self.process(fixedVolumeNode, movingVolumeNode, deleteTemporaryFiles)
+        self.process(fixedVolumeNode, movingVolumeNode, deleteTemporaryFiles, logToStdout)
 
     def _processOrExcept(self,
                 tempDir,
@@ -210,23 +211,23 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     def process(self,
                 fixedVolumeNode,
                 movingVolumeNode,
-                deleteTemporaryFiles=True,
-                logToStdout=False) -> None:
+                deleteTemporaryFiles=False,
+                logToStdout=True) -> None:
         """
         Run the processing algorithm.
         Can be used without GUI widget.
         """
 
         self.isRunning = True
-        tempDir = self._createTempDirectory()
+        tempDir = createTempDirectory()
         self.addLog(f'Registration is started in working directory: {tempDir}')
 
         try:
             self.cancelRequested = False
 
-            print('self._processOrExcept')
+            print('self._processOrExcept in {}'.format(tempDir))
 
-            if False:
+            if False:  # todo
                 self._processOrExcept(
                     tempDir,
                     fixedVolumeNode,
