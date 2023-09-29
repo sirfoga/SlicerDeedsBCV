@@ -6,7 +6,7 @@ import shutil
 import slicer
 from slicer.ScriptedLoadableModule import *
 
-from src.utils import createTempDirectory
+from src.utils import createTempDirectory, createDirectory
 
 
 def exportNode(node, folder, filename):
@@ -28,12 +28,26 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    FIXED_VOLUME_REF = "FixedVolume"
-    MOVING_VOLUME_REF = "MovingVolume"
-    OUTPUT_VOLUME_REF = "OutputVolume"
-    OUTPUT_TRANSFORM_REF = "OutputTransform"
+    # inputs
+    FIXED_VOLUME_REF = 'fixedVolumeSelector'  # MUST match .ui naming
+    MOVING_VOLUME_REF = 'movingVolumeSelector'
 
-    INPUT_DIR_NAME = "input"
+    # pipeline params
+    PIPELINE_STEP_AFFINE_REF = 'pipelineStepAffineButton'
+    PIPELINE_STEP_DEFORMABLE_REF = 'pipelineStepDeformableButton'
+    PIPELINE_STEP_BOTH_REF = 'pipelineStepBothButton'
+
+    # advanced params
+    ADVANCED_REG_PARAM_REF = 'regularisationSpinBox'
+    ADVANCED_NLEVELS_PARAM_REF = 'numLevelsSpinBox'
+    ADVANCED_SPACING_PARAM_REF = 'gridSpacingSpinBox'
+    ADVANCED_MAX_SEARCH_RADIUS_PARAM_REF = 'maxSearchRadiusSpinBox'
+    ADVANCED_QUANT_PARAM_REF = 'stepQuantisationSpinBox'
+
+    # outputs
+    OUTPUT_VOLUME_REF = 'outputVolumeSelector'
+
+    INPUT_DIR_NAME = 'input'
 
     def __init__(self) -> None:
         """
@@ -170,13 +184,20 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 self.addLog(processOutput)
             raise subprocess.CalledProcessError(return_code, "deeds")
 
-    def processParameterNode(self, parameterNode, deleteTemporaryFiles, logToStdout):
-        # todo get more options from `parameterNode`
-
+    def processParameterNode(self, parameterNode, pipelineSteps, advancedParams, deleteTemporaryFiles, logToStdout):
         fixedVolumeNode = parameterNode.GetNodeReference(self.FIXED_VOLUME_REF)
         movingVolumeNode = parameterNode.GetNodeReference(self.MOVING_VOLUME_REF)
 
-        self.process(fixedVolumeNode, movingVolumeNode, deleteTemporaryFiles, logToStdout)
+        # todo get more options from `parameterNode`
+
+        self.process(
+            fixedVolumeNode,
+            movingVolumeNode,
+            pipelineSteps,
+            advancedParams,
+            deleteTemporaryFiles,
+            logToStdout
+        )
 
     def _processOrExcept(self,
                 tempDir,
@@ -211,6 +232,8 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     def process(self,
                 fixedVolumeNode,
                 movingVolumeNode,
+                pipelineSteps='both',
+                advancedParams=(1.60, 5, 8, 8, 5),
                 deleteTemporaryFiles=False,
                 logToStdout=True) -> None:
         """
@@ -226,6 +249,11 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             self.cancelRequested = False
 
             print('self._processOrExcept in {}'.format(tempDir))
+
+            print(pipelineSteps)
+
+            regularisation, n_levels, init_grid_spacing, max_search_r, step_q = advancedParams
+            print(regularisation, n_levels, init_grid_spacing, max_search_r, step_q)
 
             if False:  # todo
                 self._processOrExcept(

@@ -131,23 +131,29 @@
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
-       <widget class="QRadioButton" name="radioButton">
+       <widget class="QRadioButton" name="pipelineStepAffineButton">
         <property name="text">
          <string>Affine</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QRadioButton" name="radioButton_2">
+       <widget class="QRadioButton" name="pipelineStepDeformableButton">
         <property name="text">
          <string>Deformable</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QRadioButton" name="radioButton_3">
+       <widget class="QRadioButton" name="pipelineStepBothButton">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
         <property name="text">
          <string>Both</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -202,7 +208,7 @@
        </widget>
       </item>
       <item row="3" column="1">
-       <widget class="QSpinBox" name="searchRadiusSpinBox">
+       <widget class="QSpinBox" name="maxSearchRadiusSpinBox">
         <property name="value">
          <number>8</number>
         </property>

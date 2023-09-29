@@ -34,7 +34,7 @@ class AbstractRegistrationWidget():
         """
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
-            self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
+            self._parameterNode.disconnectGui(self._parameterNodeGuiTag)  # todo error ?! `object has no attribute 'disconnectGui'`
             self._parameterNodeGuiTag = None
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
 
@@ -158,13 +158,21 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
         self._updatingGUIFromParameterNode = True
 
-        self.ui.fixedVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.FIXED_VOLUME_REF))
-        self.ui.movingVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.MOVING_VOLUME_REF))
+        keys = [
+            self.logic.FIXED_VOLUME_REF, self.logic.MOVING_VOLUME_REF,
+
+            # todo other params??
+
+            self.logic.OUTPUT_VOLUME_REF,
+        ]
+
+        for key in keys:
+            node = self._parameterNode.GetNodeReference(key)
+            ui_widget = getattr(self.ui, key)
+            ui_widget.setCurrentNode(node)
 
         self.updateApplyButtonState()
-
-        # All the GUI updates are done
-        self._updatingGUIFromParameterNode = False
+        self._updatingGUIFromParameterNode = False  # GUI updates are done
 
     def updateParameterNodeFromGUI(self, caller=None, event=None):
         """
@@ -175,16 +183,19 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         if self._parameterNode is None or self._updatingGUIFromParameterNode:
             return
 
-        wasModified = self._parameterNode.StartModify()    # Modify all properties in a single batch
+        wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
-        # inputs
-        self._parameterNode.SetNodeReferenceID(self.logic.FIXED_VOLUME_REF, self.ui.fixedVolumeSelector.currentNodeID)
-        self._parameterNode.SetNodeReferenceID(self.logic.MOVING_VOLUME_REF, self.ui.movingVolumeSelector.currentNodeID)
+        keys = [
+            self.logic.FIXED_VOLUME_REF, self.logic.MOVING_VOLUME_REF,
 
-        # todo other params
+            # todo other params
 
-        # outputs
-        self._parameterNode.SetNodeReferenceID(self.logic.OUTPUT_VOLUME_REF, self.ui.outputVolumeSelector.currentNodeID)
+            self.logic.OUTPUT_VOLUME_REF,
+        ]
+        for key in keys:
+            ui_widget = getattr(self.ui, key)
+            widget_id = ui_widget.currentNodeID
+            self._parameterNode.SetNodeReferenceID(key, widget_id)
 
         self._parameterNode.EndModify(wasModified)
 
@@ -211,9 +222,46 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
 
         self.updateApplyButtonState()
 
+    def getUIProperty(self, key, prop):
+        widget = getattr(self.ui, key)
+        return getattr(widget, prop)
+
+    def getPipelineStepSelected(self):
+        keys = [
+            self.logic.PIPELINE_STEP_AFFINE_REF,
+            self.logic.PIPELINE_STEP_DEFORMABLE_REF,
+        ]
+        pipelineStepAffineButtonState, pipelineStepDeformableButtonState = tuple(map(
+            lambda key: self.getUIProperty(key, 'checked'),
+            keys
+        ))
+
+        if pipelineStepAffineButtonState:
+            return 'affine'
+
+        if pipelineStepDeformableButtonState:
+            return 'deformable'
+
+        return 'both'
+
+    def getAdvancedParams(self):
+        keys = [
+            self.logic.ADVANCED_REG_PARAM_REF,
+            self.logic.ADVANCED_NLEVELS_PARAM_REF,
+            self.logic.ADVANCED_SPACING_PARAM_REF,
+            self.logic.ADVANCED_MAX_SEARCH_RADIUS_PARAM_REF,
+            self.logic.ADVANCED_QUANT_PARAM_REF
+        ]
+        return tuple(map(
+            lambda key: self.getUIProperty(key, 'value'),
+            keys
+        ))
+
     def runLogicOrExcept(self):
         self.logic.processParameterNode(
             self._parameterNode,
+            pipelineSteps=self.getPipelineStepSelected(),
+            advancedParams=self.getAdvancedParams(),
             deleteTemporaryFiles=False,
             logToStdout=True
         )
@@ -225,29 +273,35 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         # todo get ouput (moved) from logic and display
         # get affine (rigid) (+ deformable) trans from logic and save in the Save folder
 
+    def setStateApplyButton(self, enabled, text=None):
+        if not (text is None):
+            self.ui.applyButton.text = text
+
+        self.ui.applyButton.enabled = enabled
+
+    def disableApplyButton(self, text=None):
+        self.setStateApplyButton(False, text)
+
+    def enableApplyButton(self, text=None):
+        self.setStateApplyButton(True, text)
+
     def updateApplyButtonState(self):
         if self.registrationInProgress or self.logic.isRunning:
             if self.logic.cancelRequested:
-                self.ui.applyButton.text = "Cancelling..."
-                self.ui.applyButton.enabled = False
+                self.disableApplyButton('Cancelling...')
             else:
-                self.ui.applyButton.text = "Cancel"
-                self.ui.applyButton.enabled = True
+                self.enableApplyButton('Cancel')
         else:
             fixedVolumeNode = self._parameterNode.GetNodeReference(self.logic.FIXED_VOLUME_REF)
             movingVolumeNode = self._parameterNode.GetNodeReference(self.logic.MOVING_VOLUME_REF)
+
             outputVolumeNode = self._parameterNode.GetNodeReference(self.logic.OUTPUT_VOLUME_REF)
 
             if not fixedVolumeNode or not movingVolumeNode:
-                self.ui.applyButton.text = "Select fixed and moving volumes"
-                self.ui.applyButton.enabled = False
+                self.disableApplyButton('Select fixed and moving volumes')
             elif fixedVolumeNode == movingVolumeNode:
-                self.ui.applyButton.text = "Fixed and moving volume must not be the same"
-                self.ui.applyButton.enabled = False
+                self.disableApplyButton('Fixed and moving volume must not be the same')
             elif not outputVolumeNode:
-                self.ui.applyButton.text = "Select an output volume"
-                self.ui.applyButton.enabled = False
-            # todo check pipeline steps
+                self.disableApplyButton('Select an output volume')
             else:
-                self.ui.applyButton.text = "Apply"
-                self.ui.applyButton.enabled = True
+                self.enableApplyButton('Apply')
