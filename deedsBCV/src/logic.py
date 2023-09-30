@@ -247,14 +247,6 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         try:
             self.cancelRequested = False
-
-            print('self._processOrExcept in {}'.format(tempDir))
-
-            print(pipelineSteps)
-
-            regularisation, n_levels, init_grid_spacing, max_search_r, step_q = advancedParams
-            print(regularisation, n_levels, init_grid_spacing, max_search_r, step_q)
-
             if False:  # todo
                 self._processOrExcept(
                     tempDir,
