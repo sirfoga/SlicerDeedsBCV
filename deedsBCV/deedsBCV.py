@@ -1,21 +1,4 @@
-import logging
-import os
-import platform
-import subprocess
-import shutil
-from typing import Annotated, Optional
-
-import vtk
-
-import slicer
 from slicer.ScriptedLoadableModule import *
-from slicer.util import VTKObservationMixin
-from slicer.parameterNodeWrapper import (
-    parameterNodeWrapper,
-    WithinRange,
-)
-
-from slicer import vtkMRMLScalarVolumeNode
 
 from src.widget import deedsBCVWidget  # else 'Warning, there is no UI for the module "deedsBCV"' ..
 

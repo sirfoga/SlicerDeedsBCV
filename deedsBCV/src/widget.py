@@ -101,6 +101,7 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
     def _setupLogic(self) -> None:
         self.logic = Logic()
         self.logic.logCallback = self.addLog
+
         self.registrationInProgress = False
 
     def _setupUI(self) -> None:
@@ -200,15 +201,13 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         self._parameterNode.EndModify(wasModified)
 
     def onApplyButton(self) -> None:
-        """
-        Run processing when user clicks "Apply" button.
-        """
+        """ Run processing when user clicks "Apply" button. """
 
         if self.registrationInProgress:
             self.logic.cancelRequested = True
             self.registrationInProgress = False
         else:
-            with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
+            with slicer.util.tryWithErrorDisplay('Failed to compute results.', waitCursor=True):
                 self.ui.statusLabel.plainText = ''
 
                 try:
@@ -227,22 +226,7 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         return getattr(widget, prop)
 
     def getPipelineStepSelected(self):
-        keys = [
-            self.logic.PIPELINE_STEP_AFFINE_REF,
-            self.logic.PIPELINE_STEP_DEFORMABLE_REF,
-        ]
-        pipelineStepAffineButtonState, pipelineStepDeformableButtonState = tuple(map(
-            lambda key: self.getUIProperty(key, 'checked'),
-            keys
-        ))
-
-        if pipelineStepAffineButtonState:
-            return 'affine'
-
-        if pipelineStepDeformableButtonState:
-            return 'deformable'
-
-        return 'both'
+        return self.getUIProperty(self.logic.PIPELINE_STEPS, 'checked')
 
     def getAdvancedParams(self):
         keys = [
@@ -260,10 +244,10 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
     def runLogicOrExcept(self):
         self.logic.processParameterNode(
             self._parameterNode,
-            pipelineSteps=self.getPipelineStepSelected(),
+            alsoAffineStep=self.getPipelineStepSelected(),
             advancedParams=self.getAdvancedParams(),
             deleteTemporaryFiles=False,
-            logToStdout=True
+            #deprecated, of course log! logToStdout=True
         )
 
     def onLogicSuccess(self):

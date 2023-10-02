@@ -2,11 +2,12 @@ import os
 import platform
 import logging
 import shutil
+import subprocess
 
 import slicer
 from slicer.ScriptedLoadableModule import *
 
-from src.utils import createTempDirectory, createDirectory
+from src.utils import createTempDirectory, createDirectory, pad_smaller_along_depth, create_sub_process
 
 
 def exportNode(node, folder, filename):
@@ -33,9 +34,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     MOVING_VOLUME_REF = 'movingVolumeSelector'
 
     # pipeline params
-    PIPELINE_STEP_AFFINE_REF = 'pipelineStepAffineButton'
-    PIPELINE_STEP_DEFORMABLE_REF = 'pipelineStepDeformableButton'
-    PIPELINE_STEP_BOTH_REF = 'pipelineStepBothButton'
+    PIPELINE_STEPS = 'includeAffineStepCheckbox'
 
     # advanced params
     ADVANCED_REG_PARAM_REF = 'regularisationSpinBox'
@@ -46,8 +45,11 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
     # outputs
     OUTPUT_VOLUME_REF = 'outputVolumeSelector'
+    OUTPUT_FOLDER = 'outputs'
 
-    INPUT_DIR_NAME = 'input'
+    # files
+    FIXED_FILENAME = 'fixed'
+    MOVING_FILENAME = 'moving'
 
     def __init__(self) -> None:
         """
@@ -81,8 +83,11 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
     def addLog(self, text):
         logging.info(text)
+
         if self.logCallback:
             self.logCallback(text)
+        else:
+            print('debug no log callback found')
 
     def getBinDir(self):
         if not (self.binDir):
@@ -92,68 +97,18 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
     def _findBinDirOrExcept(self):
         candidates = [
-            # install tree
-            os.path.join(self.scriptPath, '..'),
-            os.path.join(self.scriptPath, '../../../bin'),
             # build tree
-            os.path.join(self.scriptPath, '../../../../bin'),
-            os.path.join(self.scriptPath, '../../../../bin/Release'),
-            os.path.join(self.scriptPath, '../../../../bin/Debug'),
-            os.path.join(self.scriptPath, '../../../../bin/RelWithDebInfo'),
-            os.path.join(self.scriptPath, '../../../../bin/MinSizeRel') ]
+            os.path.join(self.scriptPath, '../../build/bin'),
+        ]
 
         for candidate in candidates:
             candidate_path = os.path.join(candidate, self.linearExeFilename)
             if os.path.isfile(candidate_path):
                 return os.path.abspath(candidate)
 
-        raise ValueError('Elastix not found')
+        raise ValueError('bin not found')
 
-    def _getEnv(self):  # todo needed?
-        """Create an environment for elastix where executables are added to the path"""
-
-        binDir = self.getBinDir()
-        binEnv = os.environ.copy()
-        binEnv["PATH"] = os.path.join(binDir, binEnv["PATH"]) if binEnv.get("PATH") else binDir
-
-        if platform.system() != 'Windows':
-            libDir = os.path.abspath(os.path.join(binDir, '../lib'))
-            binEnv["LD_LIBRARY_PATH"] = os.path.join(libDir, binEnv["LD_LIBRARY_PATH"]) if binEnv.get("LD_LIBRARY_PATH") else libDir
-
-        return binEnv
-
-    def runExec(self, cmdLineArguments):
-        self.addLog("Register volumes...")
-
-        executableFilePath = os.path.join(
-            self.getBinDir(),
-            self.linearExeFilename
-        )  # todo also deformable
-        logging.info(f"Running exe using: {executableFilePath}: {cmdLineArguments!r}")
-        return self._createSubProcess(executableFilePath, cmdLineArguments)
-
-    def _createSubProcess(self, executableFilePath, cmdLineArguments):
-        full_command = [executableFilePath] + cmdLineArguments
-        return subprocess.Popen(
-            full_command,
-            env=self._getEnv(),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            startupinfo=self._getStartupInfo()
-        )
-
-    def _getStartupInfo(self):
-        if platform.system() != 'Windows':
-            return None
-
-        # Hide console window (only needed on Windows)
-        info = subprocess.STARTUPINFO()
-        info.dwFlags = 1
-        info.wShowWindow = 0
-        return info
-
-    def _logProcessOutput(self, process, to_stdout=False):
+    def _handleProcess(self, process, to_stdout=False):
         # save process output (if not logged) so that it can be displayed in case of an error
         processOutput = ''
 
@@ -161,7 +116,9 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             try:
                 stdout_line = process.stdout.readline()
                 if not stdout_line:
+                    self.addLog('Sub-process exited')
                     break
+
                 stdout_line = stdout_line.rstrip()
 
                 if to_stdout:
@@ -172,70 +129,90 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 # Probably system locale is set to non-English, we cannot easily capture process output.
                 # Code page conversion happens because `universal_newlines=True` sets process output to text mode.
                 pass
-            slicer.app.processEvents()    # give a chance to click Cancel button
+
+            slicer.app.processEvents()  # give a chance to click Cancel button
             if self.cancelRequested:
                 process.kill()
+                self.addLog('Sub-process killed')
                 break
 
         process.stdout.close()
+        self.addLog('Waiting for sub-process return code')
         return_code = process.wait()
+
         if return_code and not self.cancelRequested:
             if processOutput:
                 self.addLog(processOutput)
-            raise subprocess.CalledProcessError(return_code, "deeds")
 
-    def processParameterNode(self, parameterNode, pipelineSteps, advancedParams, deleteTemporaryFiles, logToStdout):
+            raise subprocess.CalledProcessError(return_code, 'deeds')
+
+    def run_linear_exe(self, moving_path, fixed_path, out_folder, advanced_params=None):
+        """ output matrix will be on fixed volume's folder; todo parse `advancedParams` """
+
+        affine_path = os.path.join(out_folder, 'affine')
+
+        cli_args = [
+            '-F', fixed_path,
+            '-M', moving_path,
+            '-O', affine_path
+        ]
+        exe_path = os.path.join(self.getBinDir(), 'linear')
+        process = create_sub_process(exe_path, cli_args)
+        self._handleProcess(process, to_stdout=True)
+
+        return affine_path + '_matrix.txt'  # deeds will append this
+
+    def run_deformable_exe(self, moving_path, fixed_path, affine_path=None, advanced_params=None):
+        """ todo parse `advancedParams` """
+
+        if not (affine_path is None):
+            out_folder, _ = os.path.split(os.path.abspath(affine_path))
+            out_folder = out_folder + '/pred'
+        else:
+            out_folder, _ = os.path.split(os.path.abspath(fixed_path))
+            out_folder = os.path.join(out_folder, '/{}'.format(self.OUTPUT_FOLDER))
+            createDirectory(out_folder)
+
+            out_folder = os.path.join(out_folder, '/pred')
+            print('debug created out folder @', out_folder)
+
+        cli_args = [
+            '-F', fixed_path,
+            '-M', moving_path,
+            '-O', out_folder
+        ]
+        if not (affine_path is None):
+            cli_args += [
+                '-A', affine_path
+            ]
+
+        exe_path = os.path.join(self.getBinDir(), 'deeds')
+        process = create_sub_process(exe_path, cli_args)
+        self._handleProcess(process, to_stdout=True)
+
+        return out_folder  # output basename path
+
+    def processParameterNode(self, parameterNode, alsoAffineStep, advancedParams, deleteTemporaryFiles):
         fixedVolumeNode = parameterNode.GetNodeReference(self.FIXED_VOLUME_REF)
         movingVolumeNode = parameterNode.GetNodeReference(self.MOVING_VOLUME_REF)
-
-        # todo get more options from `parameterNode`
+        outputVolumeNode=parameterNode.GetNodeReference(self.OUTPUT_VOLUME_REF)
 
         self.process(
             fixedVolumeNode,
             movingVolumeNode,
-            pipelineSteps,
+            outputVolumeNode,
+            alsoAffineStep,
             advancedParams,
-            deleteTemporaryFiles,
-            logToStdout
+            deleteTemporaryFiles
         )
-
-    def _processOrExcept(self,
-                tempDir,
-                fixedVolumeNode,
-                movingVolumeNode,
-                logToStdout=False) -> None:
-        inputDir = createDirectory(os.path.join(tempDir, self.INPUT_DIR_NAME))
-        resultTransformDir = createDirectory(os.path.join(tempDir, self.OUTPUT_TRANSFORM_DIR_NAME))
-
-        # compose parameters
-        inputParams = self._addInputVolumes(inputDir, [
-            [fixedVolumeNode, 'fixed.nii.gz', '-f'],  # todo check options!
-            [movingVolumeNode, 'moving.nii.gz', '-m'],
-        ])
-
-        # todo check options!
-        #inputParams += self._addParameterFiles(parameterFilenames)
-        #inputParams += ['-out', resultTransformDir]
-
-        sub_process = self.runExec(inputParams)
-        self._logProcessOutput(sub_process, to_stdout=logToStdout)
-
-        if self.cancelRequested:
-            self.addLog("User requested cancel.")
-        else:
-            self._process_outputs(
-                tempDir, parameterFilenames, fixedVolumeNode, movingVolumeNode,
-                outputVolumeNode, outputTransformNode
-            )
-            self.addLog("Registration is completed")
 
     def process(self,
                 fixedVolumeNode,
                 movingVolumeNode,
-                pipelineSteps='both',
+                outputVolumeNode,
+                alsoAffineStep=True,
                 advancedParams=(1.60, 5, 8, 8, 5),
-                deleteTemporaryFiles=False,
-                logToStdout=True) -> None:
+                deleteTemporaryFiles=False) -> None:
         """
         Run the processing algorithm.
         Can be used without GUI widget.
@@ -243,49 +220,105 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         self.isRunning = True
         tempDir = createTempDirectory()
-        self.addLog(f'Registration is started in working directory: {tempDir}')
+        self.addLog('Registration is started in working directory: {}'.format(tempDir))
 
         try:
             self.cancelRequested = False
-            if False:  # todo
-                self._processOrExcept(
-                    tempDir,
-                    fixedVolumeNode,
-                    movingVolumeNode,
-                    logToStdout
-                )
-        finally:  # Clean up
+            affine_path, pred_path = self._process_or_except(
+                tempDir,
+                fixedVolumeNode,
+                movingVolumeNode,
+                alsoAffineStep,
+                advancedParams,
+            )
+
+            self._post_process_or_except(
+                tempDir,
+                affine_path, pred_path,
+                fixedVolumeNode, movingVolumeNode, outputVolumeNode,
+            )
+        except Exception as e:
+            self.addLog('Registration failed due to {}'.format(str(e)))
+        finally:
             if deleteTemporaryFiles:
                 shutil.rmtree(tempDir)
 
             self.isRunning = False
             self.cancelRequested = False
 
-    def _addInputVolumes(self, inputDir, inputVolumes):
-        params = []
-
-        for node, filename, paramName in inputVolumes:
-            if not node:  # node is not present in scene
-                continue
-
-            filePath = exportNode(node, inputDir, filename)
-            params += [paramName, filePath]
-
-        return params
-
-    def _process_outputs(self,
+    def _process_or_except(self,
                 tempDir,
-                parameterFilenames,
                 fixedVolumeNode,
                 movingVolumeNode,
-                outputVolumeNode,
-                outputTransformNode):
-        pass  # todo checkout `_processElastixOutput`
+                alsoAffineStep,
+                advancedParams) -> None:
+        fixed_path, moving_path = self._prepareInput(
+            tempDir, fixedVolumeNode, movingVolumeNode
+        )
 
-        if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
-            outputTransformNode.AddNodeReferenceID(
-                slicer.vtkMRMLTransformNode.GetFixedNodeReferenceRole(), fixedVolumeNode.GetID()
-            )
-            outputTransformNode.AddNodeReferenceID(
-                slicer.vtkMRMLTransformNode.GetMovingNodeReferenceRole(), movingVolumeNode.GetID()
-            )
+        out_folder = os.path.join(tempDir, '{}'.format(self.OUTPUT_FOLDER))
+        createDirectory(out_folder)
+
+        if alsoAffineStep:
+            affine_path = self.run_linear_exe(moving_path, fixed_path, out_folder, advanced_params=advancedParams)
+        else:
+            affine_path = None
+
+        if self.cancelRequested:
+            raise ValueError('User requested cancel!')
+
+        pred_path = self.run_deformable_exe(moving_path, fixed_path, affine_path, advanced_params=advancedParams)
+
+        if self.cancelRequested:
+            raise ValueError('User requested cancel!')
+
+        self.addLog('Done :)')
+        return affine_path, pred_path
+
+    def _prepareInput(self, folder, fixed_node, moving_node):
+        """ pad smaller input, and save as .nii.gz """
+
+        self.addLog('Pre-processing...')
+
+        fixed_np = slicer.util.arrayFromVolume(fixed_node)
+        moving_np = slicer.util.arrayFromVolume(moving_node)
+
+        fixed_np, moving_np = pad_smaller_along_depth(fixed_np, moving_np)
+
+        # update nodes, and export them
+        slicer.util.updateVolumeFromArray(fixed_node, fixed_np)
+        fixed_path = os.path.join(folder, '{}.nii.gz'.format(self.FIXED_FILENAME))
+        slicer.util.exportNode(fixed_node, fixed_path)
+
+        slicer.util.updateVolumeFromArray(moving_node, moving_np)
+        moving_path = os.path.join(folder, '{}.nii.gz'.format(self.MOVING_FILENAME))
+        slicer.util.exportNode(moving_node, moving_path)
+
+        return fixed_path, moving_path
+
+    def _load_and_display(self, file_path, ui_node):
+        loadedOutputVolumeNode = slicer.util.loadVolume(file_path)
+        ui_node.SetAndObserveImageData(loadedOutputVolumeNode.GetImageData())
+
+    def _post_process_or_except(self,
+                tempDir,
+                affine_path, pred_path,
+                fixedVolumeNode, movingVolumeNode, outputVolumeNode):
+        """ parse outputs, save them, and, if possible, show them"""
+
+        self.addLog('Reloading volumes...')
+
+        self._load_and_display(
+            os.path.join(tempDir, '{}.nii.gz'.format(self.FIXED_FILENAME)),
+            fixedVolumeNode
+        )
+        self._load_and_display(
+            os.path.join(tempDir, '{}.nii.gz'.format(self.MOVING_FILENAME)),
+            movingVolumeNode
+        )
+        self._load_and_display(
+            pred_path + '_deformed.nii.gz',
+            outputVolumeNode
+        )
+
+        #todo save `affine_path` in Export menu
