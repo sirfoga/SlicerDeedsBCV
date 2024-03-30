@@ -6,8 +6,10 @@ import subprocess
 
 import slicer
 from slicer.ScriptedLoadableModule import *
+from slicer import vtkMRMLScalarVolumeNode
 
-from src.utils import createTempDirectory, createDirectory, pad_smaller_along_depth, create_sub_process
+from src.utils import create_tmp_folder, create_folder, pad_smaller_along_depth, create_sub_process
+from src.ui import deedsBCVParameterNode
 
 
 def exportNode(node, folder, filename):
@@ -73,13 +75,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         Initialize parameter node with default settings.
         """
 
-        print('debug only', parameterNode)
-
-        # if not parameterNode.GetParameter(self.FORCE_GRID_TRANSFORM_PARAM):
-        #     parameterNode.SetParameter(self.FORCE_GRID_TRANSFORM_PARAM, "False")
-
-        # if not parameterNode.GetParameter(self.REGISTRATION_PRESET_ID_PARAM):
-        #     parameterNode.SetParameter(self.REGISTRATION_PRESET_ID_PARAM, self.DEFAULT_PRESET_ID)
+        pass
 
     def addLog(self, text):
         logging.info(text)
@@ -171,7 +167,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         else:
             out_folder, _ = os.path.split(os.path.abspath(fixed_path))
             out_folder = os.path.join(out_folder, '/{}'.format(self.OUTPUT_FOLDER))
-            createDirectory(out_folder)
+            create_folder(out_folder)
 
             out_folder = os.path.join(out_folder, '/pred')
             print('debug created out folder @', out_folder)
@@ -192,10 +188,13 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         return out_folder  # output basename path
 
+    def getParameterNode(self):
+        return deedsBCVParameterNode(super().getParameterNode())
+
     def processParameterNode(self, parameterNode, alsoAffineStep, advancedParams, deleteTemporaryFiles):
-        fixedVolumeNode = parameterNode.GetNodeReference(self.FIXED_VOLUME_REF)
-        movingVolumeNode = parameterNode.GetNodeReference(self.MOVING_VOLUME_REF)
-        outputVolumeNode=parameterNode.GetNodeReference(self.OUTPUT_VOLUME_REF)
+        fixedVolumeNode = parameterNode.fixedVolume
+        movingVolumeNode = parameterNode.movingVolume
+        outputVolumeNode = parameterNode.outputVolume
 
         self.process(
             fixedVolumeNode,
@@ -207,19 +206,19 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         )
 
     def process(self,
-                fixedVolumeNode,
-                movingVolumeNode,
-                outputVolumeNode,
-                alsoAffineStep=True,
-                advancedParams=(1.60, 5, 8, 8, 5),
-                deleteTemporaryFiles=False) -> None:
+                fixedVolumeNode: vtkMRMLScalarVolumeNode,
+                movingVolumeNode: vtkMRMLScalarVolumeNode,
+                outputVolumeNode: vtkMRMLScalarVolumeNode,
+                alsoAffineStep: bool = True,
+                advancedParams: tuple[float] = (1.60, 5, 8, 8, 5),
+                deleteTemporaryFiles: bool = False) -> None:
         """
         Run the processing algorithm.
         Can be used without GUI widget.
         """
 
         self.isRunning = True
-        tempDir = createTempDirectory()
+        tempDir = create_tmp_folder()
         self.addLog('Registration is started in working directory: {}'.format(tempDir))
 
         try:
@@ -257,7 +256,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         )
 
         out_folder = os.path.join(tempDir, '{}'.format(self.OUTPUT_FOLDER))
-        createDirectory(out_folder)
+        create_folder(out_folder)
 
         if alsoAffineStep:
             affine_path = self.run_linear_exe(moving_path, fixed_path, out_folder, advanced_params=advancedParams)
@@ -319,6 +318,6 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         self._load_and_display(
             pred_path + '_deformed.nii.gz',
             outputVolumeNode
-        )
+        )  # todo add correct affine params
 
         #todo save `affine_path` in Export menu

@@ -11,24 +11,21 @@ import subprocess
 import numpy as np
 
 
-def createDirectory(path):
+def create_folder(path):
     if qt.QDir().mkpath(path):
         return path
     else:
         raise RuntimeError(f"Failed to create directory {path}")
 
 
-def getTempDirectoryBase():
-    tempDir = qt.QDir(slicer.app.temporaryPath)
-    fileInfo = qt.QFileInfo(qt.QDir(tempDir), "deedsBCV")
-    return createDirectory(fileInfo.absoluteFilePath())
+def create_tmp_folder():
+    tmp_dir = qt.QDir(slicer.app.temporaryPath)
+    file_info = qt.QFileInfo(qt.QDir(tmp_dir), 'deedsBCV')
+    tmp_dir = qt.QDir(create_folder(file_info.absoluteFilePath()))
 
-
-def createTempDirectory():
-    tempDir = qt.QDir(getTempDirectoryBase())
-    tempDirName = qt.QDateTime().currentDateTime().toString("yyyyMMdd_hhmmss_zzz")
-    fileInfo = qt.QFileInfo(qt.QDir(tempDir), tempDirName)
-    return createDirectory(fileInfo.absoluteFilePath())
+    temp_dir_name = qt.QDateTime().currentDateTime().toString('yyyyMMdd_hhmmss_zzz')
+    file_info = qt.QFileInfo(qt.QDir(tmp_dir), temp_dir_name)
+    return create_folder(file_info.absoluteFilePath())
 
 
 def pad_smaller_along_depth(fixed_np, moving_np, value='min'):

@@ -2,8 +2,10 @@ import vtk
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
+from typing import Optional
 
 from src.logic import deedsBCVLogic as Logic
+from src.ui import deedsBCVParameterNode
 
 
 class AbstractRegistrationWidget():
@@ -13,7 +15,6 @@ class AbstractRegistrationWidget():
 
         self._parameterNode = None
         self._parameterNodeGuiTag = None
-        self._updatingGUIFromParameterNode = False
 
     def cleanup(self) -> None:
         """
@@ -25,25 +26,24 @@ class AbstractRegistrationWidget():
         """
         Called each time the user opens this module.
         """
+
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
 
     def exit(self) -> None:
-        """
-        Called each time the user opens a different module.
-        """
+        """Called each time the user opens a different module."""
+
         # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
         if self._parameterNode:
-            self._parameterNode.disconnectGui(self._parameterNodeGuiTag)  # todo error ?! `object has no attribute 'disconnectGui'`
+            self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
-
-        self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange)
 
     def onSceneStartClose(self, caller, event) -> None:
         """
         Called just before the scene is closed.
         """
+
         # Parameter node will be reset, do not use it anymore
         self.setParameterNode(None)
 
@@ -59,8 +59,6 @@ class AbstractRegistrationWidget():
         """
         Ensure parameter node exists and observed.
         """
-        # Parameter node stores all user choices in parameter values, node selections, etc.
-        # so that when the scene is saved and reloaded, these settings are restored.
 
         self.setParameterNode(self.logic.getParameterNode())
 
@@ -118,13 +116,13 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
         # inputs
-        self.ui.fixedVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
-        self.ui.movingVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
+        #self.ui.fixedVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
+        #self.ui.movingVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
 
         # outputs
-        self.ui.outputVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
+        #self.ui.outputVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
 
-    def setParameterNode(self, inputParameterNode):
+    def setParameterNode(self, inputParameterNode: Optional[deedsBCVParameterNode] = None) -> None:
         """
         Set and observe parameter node.
         Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
@@ -136,69 +134,23 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
         # Unobserve previously selected parameter node and add an observer to the newly selected.
         # Changes of parameter node are observed so that whenever parameters are changed by a script or any other module
         # those are reflected immediately in the GUI.
-        if self._parameterNode is not None and self.hasObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode):
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+        if self._parameterNode is not None and self.hasObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange):
+            self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange)
 
         self._parameterNode = inputParameterNode
-
         if self._parameterNode is not None:
-            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+            self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange)  # monitor change in GUI
 
-        # Initial GUI update
-        self.updateGUIFromParameterNode()
-
-    def updateGUIFromParameterNode(self, caller=None, event=None):
-        """
-        This method is called whenever parameter node is changed.
-        The module GUI is updated to show the current state of the parameter node.
-        """
-
-        if self._parameterNode is None or self._updatingGUIFromParameterNode:
+    def _onParameterNodeChange(self, caller=None, event=None):
+        if self._parameterNode is None:
             return
 
-        # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
-        self._updatingGUIFromParameterNode = True
-
-        keys = [
-            self.logic.FIXED_VOLUME_REF, self.logic.MOVING_VOLUME_REF,
-
-            # todo other params??
-
-            self.logic.OUTPUT_VOLUME_REF,
-        ]
-
-        for key in keys:
-            node = self._parameterNode.GetNodeReference(key)
-            ui_widget = getattr(self.ui, key)
-            ui_widget.setCurrentNode(node)
+        # todo needed ?
+        # self.ui.fixedVolumeSelector.setCurrentNode(self._parameterNode.fixedVolume)
 
         self.updateApplyButtonState()
-        self._updatingGUIFromParameterNode = False  # GUI updates are done
-
-    def updateParameterNodeFromGUI(self, caller=None, event=None):
-        """
-        This method is called when the user makes any change in the GUI.
-        The changes are saved into the parameter node (so that they are restored when the scene is saved and loaded).
-        """
-
-        if self._parameterNode is None or self._updatingGUIFromParameterNode:
-            return
-
-        wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
-
-        keys = [
-            self.logic.FIXED_VOLUME_REF, self.logic.MOVING_VOLUME_REF,
-
-            # todo other params
-
-            self.logic.OUTPUT_VOLUME_REF,
-        ]
-        for key in keys:
-            ui_widget = getattr(self.ui, key)
-            widget_id = ui_widget.currentNodeID
-            self._parameterNode.SetNodeReferenceID(key, widget_id)
-
-        self._parameterNode.EndModify(wasModified)
 
     def onApplyButton(self) -> None:
         """ Run processing when user clicks "Apply" button. """
@@ -276,14 +228,14 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
             else:
                 self.enableApplyButton('Cancel')
         else:
-            fixedVolumeNode = self._parameterNode.GetNodeReference(self.logic.FIXED_VOLUME_REF)
-            movingVolumeNode = self._parameterNode.GetNodeReference(self.logic.MOVING_VOLUME_REF)
-
-            outputVolumeNode = self._parameterNode.GetNodeReference(self.logic.OUTPUT_VOLUME_REF)
+            fixedVolumeNode = self._parameterNode.fixedVolume
+            movingVolumeNode = self._parameterNode.movingVolume
+            outputVolumeNode = self._parameterNode.outputVolume
 
             if not fixedVolumeNode or not movingVolumeNode:
                 self.disableApplyButton('Select fixed and moving volumes')
             elif fixedVolumeNode == movingVolumeNode:
+                print(fixedVolumeNode, movingVolumeNode)
                 self.disableApplyButton('Fixed and moving volume must not be the same')
             elif not outputVolumeNode:
                 self.disableApplyButton('Select an output volume')

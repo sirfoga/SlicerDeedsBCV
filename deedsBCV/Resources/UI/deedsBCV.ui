@@ -42,7 +42,7 @@
          <bool>true</bool>
         </property>
         <property name="toolTip">
-         <string>The moving volume will be transformed into this image space.</string>
+         <string>The fixed volume, target of the registration.</string>
         </property>
         <property name="nodeTypes">
          <stringlist notr="true">
@@ -72,6 +72,9 @@
         </property>
         <property name="interactionNodeSingletonTag">
          <string notr="true"/>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>fixedVolume</string>
         </property>
        </widget>
       </item>
@@ -118,6 +121,9 @@
         </property>
         <property name="interactionNodeSingletonTag">
          <string notr="true"/>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>movingVolume</string>
         </property>
        </widget>
       </item>
@@ -272,6 +278,9 @@
         </property>
         <property name="interactionNodeSingletonTag">
          <string notr="true"/>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>outputVolume</string>
         </property>
        </widget>
       </item>
