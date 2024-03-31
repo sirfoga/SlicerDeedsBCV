@@ -59,7 +59,7 @@ def pad_smaller_along_depth(fixed_np, moving_np, value='min'):
     return fixed_np, moving_np
 
 
-def getStartupInfo():
+def get_os_info():
     if platform.system() != 'Windows':
         return None
 
@@ -77,6 +77,6 @@ def create_sub_process(executableFilePath, cmdLineArguments):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         universal_newlines=True,
-        startupinfo=getStartupInfo()
+        startupinfo=get_os_info()
         #todo? shell=False
     )

@@ -8,66 +8,7 @@ from src.logic import deedsBCVLogic as Logic
 from src.ui import deedsBCVParameterNode
 
 
-class AbstractRegistrationWidget():
-    def __init__(self) -> None:
-        self.logic = None
-        self.ui = None
-
-        self._parameterNode = None
-        self._parameterNodeGuiTag = None
-
-    def cleanup(self) -> None:
-        """
-        Called when the application closes and the module widget is destroyed.
-        """
-        self.removeObservers()
-
-    def enter(self) -> None:
-        """
-        Called each time the user opens this module.
-        """
-
-        # Make sure parameter node exists and observed
-        self.initializeParameterNode()
-
-    def exit(self) -> None:
-        """Called each time the user opens a different module."""
-
-        # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
-        if self._parameterNode:
-            self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
-            self._parameterNodeGuiTag = None
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange)
-
-    def onSceneStartClose(self, caller, event) -> None:
-        """
-        Called just before the scene is closed.
-        """
-
-        # Parameter node will be reset, do not use it anymore
-        self.setParameterNode(None)
-
-    def onSceneEndClose(self, caller, event) -> None:
-        """
-        Called just after the scene is closed.
-        """
-        # If this module is shown while the scene is closed then recreate a new parameter node immediately
-        if self.parent.isEntered:
-            self.initializeParameterNode()
-
-    def initializeParameterNode(self) -> None:
-        """
-        Ensure parameter node exists and observed.
-        """
-
-        self.setParameterNode(self.logic.getParameterNode())
-
-    def addLog(self, text):
-        self.ui.statusLabel.appendPlainText(text)
-        slicer.app.processEvents()  # force update
-
-
-class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, AbstractRegistrationWidget):
+class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -79,8 +20,12 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
 
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
-        AbstractRegistrationWidget.__init__(self)  # boilerplate
 
+        self.logic = None
+        self.ui = None
+
+        self._parameterNode = None
+        self._parameterNodeGuiTag = None
         self.registrationInProgress = False
 
     def setup(self) -> None:
@@ -241,3 +186,53 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin, Abstract
                 self.disableApplyButton('Select an output volume')
             else:
                 self.enableApplyButton('Apply')
+
+    def cleanup(self) -> None:
+        """
+        Called when the application closes and the module widget is destroyed.
+        """
+        self.removeObservers()
+
+    def enter(self) -> None:
+        """
+        Called each time the user opens this module.
+        """
+
+        # Make sure parameter node exists and observed
+        self.initializeParameterNode()
+
+    def exit(self) -> None:
+        """Called each time the user opens a different module."""
+
+        # Do not react to parameter node changes (GUI will be updated when the user enters into the module)
+        if self._parameterNode:
+            self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
+            self._parameterNodeGuiTag = None
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange)
+
+    def onSceneStartClose(self, caller, event) -> None:
+        """
+        Called just before the scene is closed.
+        """
+
+        # Parameter node will be reset, do not use it anymore
+        self.setParameterNode(None)
+
+    def onSceneEndClose(self, caller, event) -> None:
+        """
+        Called just after the scene is closed.
+        """
+        # If this module is shown while the scene is closed then recreate a new parameter node immediately
+        if self.parent.isEntered:
+            self.initializeParameterNode()
+
+    def initializeParameterNode(self) -> None:
+        """
+        Ensure parameter node exists and observed.
+        """
+
+        self.setParameterNode(self.logic.getParameterNode())
+
+    def addLog(self, text):
+        self.ui.statusLabel.appendPlainText(text)
+        slicer.app.processEvents()  # force update
