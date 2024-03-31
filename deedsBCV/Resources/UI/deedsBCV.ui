@@ -151,8 +151,8 @@
       </item>
       <item row="2" column="1">
        <widget class="QDoubleSpinBox" name="regularisationSpinBox">
-        <property name="value">
-         <double>1.600000000000000</double>
+        <property name="SlicerParameterName" stdset="0">
+         <string>regularisationParameter</string>
         </property>
        </widget>
       </item>
@@ -169,10 +169,10 @@
          <number>1</number>
         </property>
         <property name="maximum">
-         <number>42</number>
+         <number>10</number>
         </property>
-        <property name="value">
-         <number>5</number>
+        <property name="SlicerParameterName" stdset="0">
+         <string>numLevelsParameter</string>
         </property>
        </widget>
       </item>
@@ -185,8 +185,14 @@
       </item>
       <item row="4" column="1">
        <widget class="QSpinBox" name="gridSpacingSpinBox">
-        <property name="value">
-         <number>8</number>
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>10</number>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>gridSpacingParameter</string>
         </property>
        </widget>
       </item>
@@ -199,8 +205,14 @@
       </item>
       <item row="5" column="1">
        <widget class="QSpinBox" name="maxSearchRadiusSpinBox">
-        <property name="value">
-         <number>8</number>
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>10</number>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>maxSearchRadiusParameter</string>
         </property>
        </widget>
       </item>
@@ -213,8 +225,14 @@
       </item>
       <item row="6" column="1">
        <widget class="QSpinBox" name="stepQuantisationSpinBox">
-        <property name="value">
-         <number>5</number>
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>10</number>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>stepQuantisationParameter</string>
         </property>
        </widget>
       </item>
@@ -235,6 +253,9 @@
         </property>
         <property name="checked">
          <bool>true</bool>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>includeAffineStepParameter</string>
         </property>
        </widget>
       </item>

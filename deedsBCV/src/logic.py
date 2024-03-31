@@ -85,13 +85,13 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         else:
             print('debug no log callback found')
 
-    def getBinDir(self):
+    def get_bin_folder(self):
         if not (self.binDir):
-            self.binDir = self._findBinDirOrExcept()
+            self.binDir = self._find_bin_folder_or_except()
 
         return self.binDir
 
-    def _findBinDirOrExcept(self):
+    def _find_bin_folder_or_except(self):
         candidates = [
             # build tree
             os.path.join(self.scriptPath, '../../build/bin'),
@@ -146,20 +146,27 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         """ output matrix will be on fixed volume's folder; todo parse `advancedParams` """
 
         affine_path = os.path.join(out_folder, 'affine')
+        regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params
+        # todo use them!
 
         cli_args = [
             '-F', fixed_path,
             '-M', moving_path,
             '-O', affine_path
         ]
-        exe_path = os.path.join(self.getBinDir(), 'linear')
+        exe_path = os.path.join(self.get_bin_folder(), 'linear')
         process = create_sub_process(exe_path, cli_args)
         self._handleProcess(process, to_stdout=True)
 
         return affine_path + '_matrix.txt'  # deeds will append this
 
     def run_deformable_exe(self, moving_path, fixed_path, affine_path=None, advanced_params=None):
-        """ todo parse `advancedParams` """
+        def _build_stepped_param(init_value, n_steps):
+            out = [
+                init_value - i  # decrease by 1 each level
+                for i in range(n_steps)
+            ]
+            return 'x'.join(map(str, out))
 
         if not (affine_path is None):
             out_folder, _ = os.path.split(os.path.abspath(affine_path))
@@ -172,17 +179,24 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             out_folder = os.path.join(out_folder, '/pred')
             print('debug created out folder @', out_folder)
 
+        regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params
+
         cli_args = [
             '-F', fixed_path,
             '-M', moving_path,
-            '-O', out_folder
+            '-O', out_folder,
+            '-a', regularisationParameter,
+            '-l', numLevelsParameter,
+            '-G', _build_stepped_param(gridSpacingParameter, numLevelsParameter),
+            '-L', _build_stepped_param(maxSearchRadiusParameter, numLevelsParameter),
+            '-Q', _build_stepped_param(stepQuantisationParameter, numLevelsParameter)
         ]
         if not (affine_path is None):
             cli_args += [
                 '-A', affine_path
             ]
 
-        exe_path = os.path.join(self.getBinDir(), 'deeds')
+        exe_path = os.path.join(self.get_bin_folder(), 'deeds')
         process = create_sub_process(exe_path, cli_args)
         self._handleProcess(process, to_stdout=True)
 
@@ -191,7 +205,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return deedsBCVParameterNode(super().getParameterNode())
 
-    def processParameterNode(self, parameterNode, alsoAffineStep, advancedParams, deleteTemporaryFiles):
+    def processParameterNode(self, parameterNode, deleteTemporaryFiles):
         fixedVolumeNode = parameterNode.fixedVolume
         movingVolumeNode = parameterNode.movingVolume
         outputVolumeNode = parameterNode.outputVolume
@@ -200,9 +214,15 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             fixedVolumeNode,
             movingVolumeNode,
             outputVolumeNode,
-            alsoAffineStep,
-            advancedParams,
-            deleteTemporaryFiles
+            alsoAffineStep=parameterNode.includeAffineStepParameter,
+            advancedParams=(
+                parameterNode.regularisationParameter,
+                parameterNode.numLevelsParameter,
+                parameterNode.gridSpacingParameter,
+                parameterNode.maxSearchRadiusParameter,
+                parameterNode.stepQuantisationParameter
+            ),
+            deleteTemporaryFiles=deleteTemporaryFiles
         )
 
     def process(self,

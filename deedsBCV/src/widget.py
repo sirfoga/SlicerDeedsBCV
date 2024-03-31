@@ -122,27 +122,9 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         widget = getattr(self.ui, key)
         return getattr(widget, prop)
 
-    def getPipelineStepSelected(self):
-        return self.getUIProperty(self.logic.PIPELINE_STEPS, 'checked')
-
-    def getAdvancedParams(self):
-        keys = [
-            self.logic.ADVANCED_REG_PARAM_REF,
-            self.logic.ADVANCED_NLEVELS_PARAM_REF,
-            self.logic.ADVANCED_SPACING_PARAM_REF,
-            self.logic.ADVANCED_MAX_SEARCH_RADIUS_PARAM_REF,
-            self.logic.ADVANCED_QUANT_PARAM_REF
-        ]
-        return tuple(map(
-            lambda key: self.getUIProperty(key, 'value'),
-            keys
-        ))
-
     def runLogicOrExcept(self):
         self.logic.processParameterNode(
             self._parameterNode,
-            alsoAffineStep=self.getPipelineStepSelected(),
-            advancedParams=self.getAdvancedParams(),
             deleteTemporaryFiles=False,
             #deprecated, of course log! logToStdout=True
         )

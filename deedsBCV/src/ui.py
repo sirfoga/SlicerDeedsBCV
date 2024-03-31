@@ -9,3 +9,10 @@ class deedsBCVParameterNode:
     fixedVolume: vtkMRMLScalarVolumeNode
     movingVolume: vtkMRMLScalarVolumeNode
     outputVolume: vtkMRMLScalarVolumeNode
+
+    regularisationParameter: float = 1.6
+    numLevelsParameter: int = 5
+    gridSpacingParameter: int = 8
+    maxSearchRadiusParameter: int = 8
+    stepQuantisationParameter: int = 5
+    includeAffineStepParameter: bool = True
