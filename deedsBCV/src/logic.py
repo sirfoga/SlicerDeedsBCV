@@ -2,13 +2,14 @@ import os
 import platform
 import logging
 import shutil
+from pathlib import Path
 import subprocess
 
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer import vtkMRMLScalarVolumeNode
 
-from src.utils import create_tmp_folder, create_folder, pad_smaller_along_depth, create_sub_process
+from src.utils import create_tmp_folder, pad_smaller_along_depth, create_sub_process
 from src.ui import deedsBCVParameterNode
 
 
@@ -150,25 +151,17 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             ]
             return 'x'.join(map(str, out))
 
-        if not (affine_path is None):
-            out_folder, _ = os.path.split(os.path.abspath(affine_path))
-            out_folder = out_folder + '/pred'
-        else:
-            out_folder, _ = os.path.split(os.path.abspath(fixed_path))
-            out_folder = os.path.join(out_folder, '/{}'.format(self.OUTPUT_FOLDER))
-            create_folder(out_folder)
-
-            out_folder = os.path.join(out_folder, '/pred')
-            print('debug created out folder @', out_folder)
+        out_folder = Path(fixed_path).parents[0] / self.OUTPUT_FOLDER
+        out_folder.mkdir(parents=True, exist_ok=True)
 
         regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params
 
         cli_args = [
             '-F', fixed_path,
             '-M', moving_path,
-            '-O', out_folder,
-            '-a', regularisationParameter,
-            '-l', numLevelsParameter,
+            '-O', str(out_folder / 'pred'),
+            '-a', '{:.3f}'.format(regularisationParameter),
+            '-l', '{:d}'.format(numLevelsParameter),
             '-G', _build_stepped_param(gridSpacingParameter, numLevelsParameter),
             '-L', _build_stepped_param(maxSearchRadiusParameter, numLevelsParameter),
             '-Q', _build_stepped_param(stepQuantisationParameter, numLevelsParameter)
@@ -199,8 +192,8 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             movingVolumeNode,
             outputVolumeNode,
             load_result=(
-                parameterNode.affineParamsInputFilepath,
-                parameterNode.deformableParamsInputFilepath
+                None if len(str(parameterNode.affineParamsInputFilepath)) < 4 else parameterNode.affineParamsInputFilepath,
+                None if len(str(parameterNode.deformableParamsInputFilepath)) < 4 else parameterNode.deformableParamsInputFilepath
             ),
             alsoAffineStep=parameterNode.includeAffineStepParameter,
             advancedParams=(
@@ -210,7 +203,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 parameterNode.maxSearchRadiusParameter,
                 parameterNode.stepQuantisationParameter
             ),
-            output_folder=parameterNode.outputFolder,
+            output_folder=None if len(str(parameterNode.outputFolder)) < 4 else parameterNode.outputFolder,
             deleteTemporaryFiles=deleteTemporaryFiles
         )
 
@@ -230,7 +223,17 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         self.isRunning = True
         tempDir = create_tmp_folder()
-        self.add_log('Registration is started in working directory: {}'.format(tempDir))
+        self.add_log('Registration is started in {}'.format(tempDir))
+
+        self.cancelRequested = False
+        affine_path, pred_path = self._process_or_except(
+            tempDir,
+            fixedVolumeNode,
+            movingVolumeNode,
+            load_result,
+            alsoAffineStep,
+            advancedParams,
+        )  # debug only to except
 
         try:
             self.cancelRequested = False
@@ -248,16 +251,17 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 affine_path, pred_path,
                 fixedVolumeNode, movingVolumeNode, outputVolumeNode,
             )
+
+            if not (output_folder is None):  # this folder is already existing
+                self.save_to_output_folder(tempDir, Path(output_folder), advancedParams)
         except Exception as e:
-            self.add_log('Registration failed due to {}'.format(str(e)))
+            self.add_log('Registration failed! {}'.format(str(e)))
         finally:
             if deleteTemporaryFiles:
                 shutil.rmtree(tempDir)
 
             self.isRunning = False
             self.cancelRequested = False
-
-        # todo save to output_folder if needed
 
     def _process_or_except(self,
                 tempDir,
@@ -270,20 +274,28 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             tempDir, fixedVolumeNode, movingVolumeNode
         )
 
-        out_folder = os.path.join(tempDir, '{}'.format(self.OUTPUT_FOLDER))
-        create_folder(out_folder)
+        out_folder = Path(tempDir, self.OUTPUT_FOLDER)
+        out_folder.mkdir(parents=True, exist_ok=True)
 
-        # todo use load_result if needed
+        affineParamsInputFilepath, deformableParamsInputFilepath = load_result
+        use_affine_from_file = not (affineParamsInputFilepath is None) and len(affineParamsInputFilepath) > 4
+        use_deformable_from_file = not (deformableParamsInputFilepath is None) and len(deformableParamsInputFilepath) > 4
 
-        if alsoAffineStep:
-            affine_path = self.run_linear_exe(moving_path, fixed_path, out_folder, advanced_params=advancedParams)
-        else:
-            affine_path = None
+        if use_affine_from_file:
+            affine_path = affineParamsInputFilepath  # todo run affine
+        else:  # check if this step needs to be done
+            if alsoAffineStep:
+                affine_path = self.run_linear_exe(moving_path, fixed_path, str(out_folder), advanced_params=advancedParams)
+            else:
+                affine_path = None
 
         if self.cancelRequested:
             raise ValueError('User requested cancel!')
 
-        pred_path = self.run_deformable_exe(moving_path, fixed_path, affine_path, advanced_params=advancedParams)
+        if use_deformable_from_file:
+            pred_path = deformableParamsInputFilepath  # todo apply deformable
+        else:
+            pred_path = self.run_deformable_exe(moving_path, fixed_path, affine_path, advanced_params=advancedParams)
 
         if self.cancelRequested:
             raise ValueError('User requested cancel!')
@@ -291,10 +303,37 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         self.add_log('Done :)')
         return affine_path, pred_path
 
+    def save_to_output_folder(self, working_folder, output_folder, advancedParams):
+        for file_name in [
+            '{}.nii.gz'.format(self.FIXED_FILENAME),
+            '{}.nii.gz'.format(self.MOVING_FILENAME),
+            'pred_deformed.nii.gz',
+            'affine_matrix.txt'
+        ]:
+            file_path = Path(working_folder) / file_name
+            if not file_path.exists():
+                file_path = Path(working_folder) / 'outputs' / file_name  # try in outputs folder
+
+            if file_path.exists():
+                shutil.copy(
+                    file_path,
+                    output_folder / file_name
+                )
+
+            self.add_log('Cannot copy {} to output folder!'.format(str(file_path)))
+
+        with open(output_folder / 'params.txt', 'w') as fp:
+            fp.write(','.join(map(
+                lambda x: '{:.5f}'.format(x),
+                advancedParams,
+            )))
+
     def _prepareInput(self, folder, fixed_node, moving_node):
         """ pad smaller input, and save as .nii.gz """
 
         self.add_log('Pre-processing...')
+
+        #todo check if fixed is None (can be since moving with pre-calc results)
 
         fixed_np = slicer.util.arrayFromVolume(fixed_node)
         moving_np = slicer.util.arrayFromVolume(moving_node)
@@ -333,8 +372,6 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             movingVolumeNode
         )
         self._load_and_display(
-            pred_path + '_deformed.nii.gz',
+            str(pred_path) + '_deformed.nii.gz',
             outputVolumeNode
-        )  # todo add correct affine params
-
-        #todo save `affine_path` in Export menu
+        )

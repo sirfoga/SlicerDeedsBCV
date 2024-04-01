@@ -1,14 +1,14 @@
 from slicer.parameterNodeWrapper import *
 from slicer import vtkMRMLScalarVolumeNode
-import pathlib
+from pathlib import Path
 
 
 @parameterNodeWrapper
 class deedsBCVParameterNode:
     """ The parameters needed by module. """
 
-    fixedVolume: vtkMRMLScalarVolumeNode
     movingVolume: vtkMRMLScalarVolumeNode
+    fixedVolume: vtkMRMLScalarVolumeNode
     outputVolume: vtkMRMLScalarVolumeNode
 
     regularisationParameter: float = 1.6
@@ -18,7 +18,7 @@ class deedsBCVParameterNode:
     stepQuantisationParameter: int = 5
     includeAffineStepParameter: bool = True
 
-    affineParamsInputFilepath: pathlib.Path
-    deformableParamsInputFilepath: pathlib.Path
+    affineParamsInputFilepath: Path
+    deformableParamsInputFilepath: Path
 
-    outputFolder: pathlib.Path
+    outputFolder: Path

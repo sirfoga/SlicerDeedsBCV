@@ -1,8 +1,10 @@
 import vtk
+import qt
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from typing import Optional
+from pathlib import Path
 
 from src.logic import deedsBCVLogic as Logic
 from src.ui import deedsBCVParameterNode
@@ -36,7 +38,13 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self._setupLogic()
         self._setupUI()
-        self._setupConnections()
+
+        self.isSingleModuleShown = False
+        slicer.util.mainWindow().setWindowTitle('Liver registration')
+        self._show_single_module(True)
+
+        self._setup_shortcuts()
+        self._setup_connections()
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -54,10 +62,7 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
-        # todo remove toolbar, only show modules, mouse, contrast
-        # todo remove statusbar if main app: slicer.util.setStatusBarVisible(False)
-
-    def _setupConnections(self) -> None:
+    def _setup_connections(self) -> None:
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
@@ -71,6 +76,41 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.loadDeformableCheckBox.toggled.connect(self._onParameterNodeChange)
 
         self.ui.saveOutputsCheckBox.toggled.connect(self._toggleSaveOutputsFileBrowser)
+
+    def _setup_shortcuts(self):
+        shortcut = qt.QShortcut(slicer.util.mainWindow())
+        shortcut.setKey(qt.QKeySequence('Ctrl+Shift+b'))
+        shortcut.connect('activated()', lambda: self._show_single_module(toggle=True))
+
+    def _show_single_module(self, singleModule=True, toggle=False):
+        if toggle:
+            singleModule = not self.isSingleModuleShown
+
+        self.isSingleModuleShown = singleModule
+
+        if singleModule:
+            # We hide all toolbars, etc. which is inconvenient as a default startup setting,
+            # therefore disable saving of window setup.
+
+            import qt
+            settings = qt.QSettings()
+            settings.setValue('MainWindow/RestoreGeometry', 'false')
+
+        keepToolbars = [
+            slicer.util.findChild(slicer.util.mainWindow(), toolbar)
+            for toolbar in ['ModuleSelectorToolBar', 'MouseModeToolBar']
+        ]
+        slicer.util.setToolbarsVisible(not singleModule, keepToolbars)
+
+        slicer.util.setMenuBarsVisible(not singleModule)
+        slicer.util.setApplicationLogoVisible(not singleModule)
+        slicer.util.setModuleHelpSectionVisible(not singleModule)
+        slicer.util.setModulePanelTitleVisible(not singleModule)
+        slicer.util.setViewControllersVisible(not singleModule)
+
+        if singleModule:
+            slicer.util.setPythonConsoleVisible(False)
+            slicer.util.setStatusBarVisible(False)
 
     def _toggleLoadAffineFileBrowser(self):
         self.ui.affineParamsLineEdit.setEnabled(
@@ -141,13 +181,13 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def runLogicOrExcept(self):
         if not self.ui.loadAffineCheckBox.checked:
-            self._parameterNode.affineParamsInputFilepath = None
+            self._parameterNode.affineParamsInputFilepath = Path('')
 
         if not self.ui.loadDeformableCheckBox.checked:
-            self._parameterNode.deformableParamsInputFilepath = None
+            self._parameterNode.deformableParamsInputFilepath = Path('')
 
         if not self.ui.saveOutputsCheckBox.checked:
-            self._parameterNode.outputFolder = None
+            self._parameterNode.outputFolder = Path('')
 
         self.logic.processParameterNode(
             self._parameterNode,
@@ -199,6 +239,10 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.disableApplyButton('Fixed volume is chosen, even if loading from file!')
                 return
 
+            if (not computing_result) and (not loading_pre_result):
+                self.disableApplyButton('Choose a fixed volume or load from file!')
+                return
+
             if fixedVolumeNode == movingVolumeNode:
                 self.disableApplyButton('Fixed and moving volume are the same!')
                 return
@@ -206,10 +250,8 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             if not outputVolumeNode:
                 self.disableApplyButton('Select an output volume')
                 return
-            
-            print()
 
-            self.enableApplyButton('Apply')
+            self.enableApplyButton('Register!')
 
     def cleanup(self) -> None:
         """
