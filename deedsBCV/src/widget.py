@@ -210,26 +210,27 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def _post_process_or_except(self, tempDir, pred_path):
         """ parse outputs, save them, and, if possible, show them"""
-
-        fixedVolumeNode, movingVolumeNode = self._parameterNode.fixedVolume, self._parameterNode.movingVolume
-
-        load2node(
-            os.path.join(tempDir, '{}.nii.gz'.format(self.FIXED_FILENAME)),
-            fixedVolumeNode
-        )
-        load2node(
-            os.path.join(tempDir, '{}.nii.gz'.format(self.MOVING_FILENAME)),
-            movingVolumeNode
-        )
-
         properties = {
-            'name': 'moved',
             'singleFile': True,
             'discardOrientation': False,  # liver on bottom-left
             'autoWindowLevel': False,  # don't even need if using pre-processed data
             'show': True
         }
-        slicer.util.loadVolume(pred_path, properties=properties)  # no node required
+
+        fpath = Path(tempDir) / '{}.nii.gz'.format(self.FIXED_FILENAME)
+        if fpath.exists():
+            properties['name'] = 'fixed pre-processed'
+            slicer.util.loadVolume(fpath, properties=properties)
+
+        fpath = Path(tempDir) / '{}.nii.gz'.format(self.MOVING_FILENAME)
+        if fpath.exists():
+            properties['name'] = 'moving pre-processed'
+            slicer.util.loadVolume(fpath, properties=properties)
+
+        pred_path = Path(pred_path)
+        if pred_path.exists():
+            properties['name'] = 'deformed'
+            slicer.util.loadVolume(pred_path, properties=properties)
 
     def setStateApplyButton(self, enabled, text=None):
         if not (text is None):
