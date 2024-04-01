@@ -54,18 +54,38 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+        # todo remove toolbar, only show modules, mouse, contrast
+        # todo remove statusbar if main app: slicer.util.setStatusBarVisible(False)
+
     def _setupConnections(self) -> None:
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
-        # inputs
-        #self.ui.fixedVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
-        #self.ui.movingVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
+        # toggle file browser
+        self.ui.loadAffineCheckBox.toggled.connect(self._toggleLoadAffineFileBrowser)
+        self.ui.loadAffineCheckBox.toggled.connect(self._onParameterNodeChange)
 
-        # outputs
-        #self.ui.outputVolumeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.updateParameterNodeFromGUI)
+        self.ui.loadDeformableCheckBox.toggled.connect(self._toggleLoadDeformableFileBrowser)
+        self.ui.loadDeformableCheckBox.toggled.connect(self._onParameterNodeChange)
+
+        self.ui.saveOutputsCheckBox.toggled.connect(self._toggleSaveOutputsFileBrowser)
+
+    def _toggleLoadAffineFileBrowser(self):
+        self.ui.affineParamsLineEdit.setEnabled(
+            self.ui.loadAffineCheckBox.checked
+        )
+
+    def _toggleLoadDeformableFileBrowser(self):
+        self.ui.deformableParamsLineEdit.setEnabled(
+            self.ui.loadDeformableCheckBox.checked
+        )
+
+    def _toggleSaveOutputsFileBrowser(self):
+        self.ui.outputFolderLineEdit.setEnabled(
+            self.ui.saveOutputsCheckBox.checked
+        )
 
     def setParameterNode(self, inputParameterNode: Optional[deedsBCVParameterNode] = None) -> None:
         """
@@ -74,7 +94,7 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """
 
         if inputParameterNode:
-            self.logic.setDefaultParameters(inputParameterNode)
+            self.logic.set_default_parameters(inputParameterNode)
 
         # Unobserve previously selected parameter node and add an observer to the newly selected.
         # Changes of parameter node are observed so that whenever parameters are changed by a script or any other module
@@ -92,10 +112,7 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if self._parameterNode is None:
             return
 
-        # todo needed ?
-        # self.ui.fixedVolumeSelector.setCurrentNode(self._parameterNode.fixedVolume)
-
-        self.updateApplyButtonState()
+        self._updateApplyButtonState()
 
     def onApplyButton(self) -> None:
         """ Run processing when user clicks "Apply" button. """
@@ -109,20 +126,29 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
                 try:
                     self.registrationInProgress = True
-                    self.updateApplyButtonState()
+                    self._updateApplyButtonState()
 
                     self.runLogicOrExcept()
                     self.onLogicSuccess()
                 finally:
                     self.registrationInProgress = False
 
-        self.updateApplyButtonState()
+        self._updateApplyButtonState()
 
     def getUIProperty(self, key, prop):
         widget = getattr(self.ui, key)
         return getattr(widget, prop)
 
     def runLogicOrExcept(self):
+        if not self.ui.loadAffineCheckBox.checked:
+            self._parameterNode.affineParamsInputFilepath = None
+
+        if not self.ui.loadDeformableCheckBox.checked:
+            self._parameterNode.deformableParamsInputFilepath = None
+
+        if not self.ui.saveOutputsCheckBox.checked:
+            self._parameterNode.outputFolder = None
+
         self.logic.processParameterNode(
             self._parameterNode,
             deleteTemporaryFiles=False,
@@ -148,26 +174,42 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def enableApplyButton(self, text=None):
         self.setStateApplyButton(True, text)
 
-    def updateApplyButtonState(self):
+    def _updateApplyButtonState(self):
         if self.registrationInProgress or self.logic.isRunning:
             if self.logic.cancelRequested:
                 self.disableApplyButton('Cancelling...')
             else:
                 self.enableApplyButton('Cancel')
         else:
-            fixedVolumeNode = self._parameterNode.fixedVolume
             movingVolumeNode = self._parameterNode.movingVolume
+            fixedVolumeNode = self._parameterNode.fixedVolume
             outputVolumeNode = self._parameterNode.outputVolume
 
-            if not fixedVolumeNode or not movingVolumeNode:
-                self.disableApplyButton('Select fixed and moving volumes')
-            elif fixedVolumeNode == movingVolumeNode:
-                print(fixedVolumeNode, movingVolumeNode)
-                self.disableApplyButton('Fixed and moving volume must not be the same')
-            elif not outputVolumeNode:
+            affineParamsPath = self._parameterNode.affineParamsInputFilepath
+            deformableParamsPath = self._parameterNode.deformableParamsInputFilepath
+
+            if not movingVolumeNode:
+                self.disableApplyButton('Select at least the moving volume')
+                return
+
+            loading_pre_result = (self.ui.loadAffineCheckBox.checked and len(str(affineParamsPath)) > 4) or (self.ui.loadDeformableCheckBox.checked and len(str(deformableParamsPath)) > 4)
+            computing_result = not(fixedVolumeNode is None)
+
+            if loading_pre_result and computing_result:
+                self.disableApplyButton('Fixed volume is chosen, even if loading from file!')
+                return
+
+            if fixedVolumeNode == movingVolumeNode:
+                self.disableApplyButton('Fixed and moving volume are the same!')
+                return
+
+            if not outputVolumeNode:
                 self.disableApplyButton('Select an output volume')
-            else:
-                self.enableApplyButton('Apply')
+                return
+            
+            print()
+
+            self.enableApplyButton('Apply')
 
     def cleanup(self) -> None:
         """

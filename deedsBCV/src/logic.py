@@ -31,27 +31,9 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    # inputs
-    FIXED_VOLUME_REF = 'fixedVolumeSelector'  # MUST match .ui naming
-    MOVING_VOLUME_REF = 'movingVolumeSelector'
-
-    # pipeline params
-    PIPELINE_STEPS = 'includeAffineStepCheckbox'
-
-    # advanced params
-    ADVANCED_REG_PARAM_REF = 'regularisationSpinBox'
-    ADVANCED_NLEVELS_PARAM_REF = 'numLevelsSpinBox'
-    ADVANCED_SPACING_PARAM_REF = 'gridSpacingSpinBox'
-    ADVANCED_MAX_SEARCH_RADIUS_PARAM_REF = 'maxSearchRadiusSpinBox'
-    ADVANCED_QUANT_PARAM_REF = 'stepQuantisationSpinBox'
-
-    # outputs
-    OUTPUT_VOLUME_REF = 'outputVolumeSelector'
-    OUTPUT_FOLDER = 'outputs'
-
-    # files
-    FIXED_FILENAME = 'fixed'
     MOVING_FILENAME = 'moving'
+    FIXED_FILENAME = 'fixed'
+    OUTPUT_FOLDER = 'outputs'
 
     def __init__(self) -> None:
         """
@@ -70,14 +52,14 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         self.linearExeFilename = 'linear' + executableExt
         #todo deformable
 
-    def setDefaultParameters(self, parameterNode):
+    def set_default_parameters(self, parameterNode):
         """
         Initialize parameter node with default settings.
         """
 
         pass
 
-    def addLog(self, text):
+    def add_log(self, text):
         logging.info(text)
 
         if self.logCallback:
@@ -112,13 +94,13 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             try:
                 stdout_line = process.stdout.readline()
                 if not stdout_line:
-                    self.addLog('Sub-process exited')
+                    self.add_log('Sub-process exited')
                     break
 
                 stdout_line = stdout_line.rstrip()
 
                 if to_stdout:
-                    self.addLog(stdout_line)
+                    self.add_log(stdout_line)
                 else:
                     processOutput += stdout_line + '\n'
             except UnicodeDecodeError as e:
@@ -129,16 +111,16 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             slicer.app.processEvents()  # give a chance to click Cancel button
             if self.cancelRequested:
                 process.kill()
-                self.addLog('Sub-process killed')
+                self.add_log('Sub-process killed')
                 break
 
         process.stdout.close()
-        self.addLog('Waiting for sub-process return code')
+        self.add_log('Waiting for sub-process return code')
         return_code = process.wait()
 
         if return_code and not self.cancelRequested:
             if processOutput:
-                self.addLog(processOutput)
+                self.add_log(processOutput)
 
             raise subprocess.CalledProcessError(return_code, 'deeds')
 
@@ -202,6 +184,8 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         return out_folder  # output basename path
 
+    # todo def run_apply_exe(self, moving_path, fixed_path, deformable_path, affine_path=None)
+
     def getParameterNode(self):
         return deedsBCVParameterNode(super().getParameterNode())
 
@@ -214,6 +198,10 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             fixedVolumeNode,
             movingVolumeNode,
             outputVolumeNode,
+            load_result=(
+                parameterNode.affineParamsInputFilepath,
+                parameterNode.deformableParamsInputFilepath
+            ),
             alsoAffineStep=parameterNode.includeAffineStepParameter,
             advancedParams=(
                 parameterNode.regularisationParameter,
@@ -222,6 +210,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 parameterNode.maxSearchRadiusParameter,
                 parameterNode.stepQuantisationParameter
             ),
+            output_folder=parameterNode.outputFolder,
             deleteTemporaryFiles=deleteTemporaryFiles
         )
 
@@ -229,8 +218,10 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 fixedVolumeNode: vtkMRMLScalarVolumeNode,
                 movingVolumeNode: vtkMRMLScalarVolumeNode,
                 outputVolumeNode: vtkMRMLScalarVolumeNode,
+                load_result=(None, None),
                 alsoAffineStep: bool = True,
                 advancedParams: tuple[float] = (1.60, 5, 8, 8, 5),
+                output_folder=None,
                 deleteTemporaryFiles: bool = False) -> None:
         """
         Run the processing algorithm.
@@ -239,7 +230,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         self.isRunning = True
         tempDir = create_tmp_folder()
-        self.addLog('Registration is started in working directory: {}'.format(tempDir))
+        self.add_log('Registration is started in working directory: {}'.format(tempDir))
 
         try:
             self.cancelRequested = False
@@ -247,6 +238,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 tempDir,
                 fixedVolumeNode,
                 movingVolumeNode,
+                load_result,
                 alsoAffineStep,
                 advancedParams,
             )
@@ -257,7 +249,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 fixedVolumeNode, movingVolumeNode, outputVolumeNode,
             )
         except Exception as e:
-            self.addLog('Registration failed due to {}'.format(str(e)))
+            self.add_log('Registration failed due to {}'.format(str(e)))
         finally:
             if deleteTemporaryFiles:
                 shutil.rmtree(tempDir)
@@ -265,10 +257,13 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             self.isRunning = False
             self.cancelRequested = False
 
+        # todo save to output_folder if needed
+
     def _process_or_except(self,
                 tempDir,
                 fixedVolumeNode,
                 movingVolumeNode,
+                load_result,
                 alsoAffineStep,
                 advancedParams) -> None:
         fixed_path, moving_path = self._prepareInput(
@@ -277,6 +272,8 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         out_folder = os.path.join(tempDir, '{}'.format(self.OUTPUT_FOLDER))
         create_folder(out_folder)
+
+        # todo use load_result if needed
 
         if alsoAffineStep:
             affine_path = self.run_linear_exe(moving_path, fixed_path, out_folder, advanced_params=advancedParams)
@@ -291,13 +288,13 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         if self.cancelRequested:
             raise ValueError('User requested cancel!')
 
-        self.addLog('Done :)')
+        self.add_log('Done :)')
         return affine_path, pred_path
 
     def _prepareInput(self, folder, fixed_node, moving_node):
         """ pad smaller input, and save as .nii.gz """
 
-        self.addLog('Pre-processing...')
+        self.add_log('Pre-processing...')
 
         fixed_np = slicer.util.arrayFromVolume(fixed_node)
         moving_np = slicer.util.arrayFromVolume(moving_node)
@@ -325,7 +322,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 fixedVolumeNode, movingVolumeNode, outputVolumeNode):
         """ parse outputs, save them, and, if possible, show them"""
 
-        self.addLog('Reloading volumes...')
+        self.add_log('Reloading volumes...')
 
         self._load_and_display(
             os.path.join(tempDir, '{}.nii.gz'.format(self.FIXED_FILENAME)),

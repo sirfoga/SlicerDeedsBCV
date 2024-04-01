@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>336</width>
+    <width>342</width>
     <height>685</height>
    </rect>
   </property>
@@ -29,14 +29,14 @@
       <bool>false</bool>
      </property>
      <layout class="QFormLayout" name="formLayout">
-      <item row="0" column="0">
+      <item row="1" column="0">
        <widget class="QLabel" name="label_2">
         <property name="text">
          <string>Fixed volume: </string>
         </property>
        </widget>
       </item>
-      <item row="0" column="1">
+      <item row="1" column="1">
        <widget class="qMRMLNodeComboBox" name="fixedVolumeSelector">
         <property name="enabled">
          <bool>true</bool>
@@ -59,7 +59,7 @@
          <string/>
         </property>
         <property name="noneEnabled">
-         <bool>false</bool>
+         <bool>true</bool>
         </property>
         <property name="addEnabled">
          <bool>false</bool>
@@ -68,7 +68,7 @@
          <bool>false</bool>
         </property>
         <property name="renameEnabled">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
         <property name="interactionNodeSingletonTag">
          <string notr="true"/>
@@ -78,14 +78,14 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="0">
+      <item row="0" column="0">
        <widget class="QLabel" name="label_3">
         <property name="text">
          <string>Moving volume: </string>
         </property>
        </widget>
       </item>
-      <item row="1" column="1">
+      <item row="0" column="1">
        <widget class="qMRMLNodeComboBox" name="movingVolumeSelector">
         <property name="enabled">
          <bool>true</bool>
@@ -117,7 +117,7 @@
          <bool>false</bool>
         </property>
         <property name="renameEnabled">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
         <property name="interactionNodeSingletonTag">
          <string notr="true"/>
@@ -131,9 +131,83 @@
     </widget>
    </item>
    <item>
+    <widget class="ctkCollapsibleButton" name="CollapsibleButton">
+     <property name="text">
+      <string>Load from file (optional)</string>
+     </property>
+     <property name="collapsed">
+      <bool>true</bool>
+     </property>
+     <layout class="QFormLayout" name="formLayout_4">
+      <property name="verticalSpacing">
+       <number>6</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item row="0" column="1">
+       <widget class="ctkPathLineEdit" name="affineParamsLineEdit">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="filters">
+         <set>ctkPathLineEdit::Files|ctkPathLineEdit::NoDot|ctkPathLineEdit::NoDotDot|ctkPathLineEdit::Readable</set>
+        </property>
+        <property name="nameFilters">
+         <stringlist>
+          <string>*.txt</string>
+         </stringlist>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>affineParamsInputFilepath</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="ctkPathLineEdit" name="deformableParamsLineEdit">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="nameFilters">
+         <stringlist>
+          <string>*.dat</string>
+         </stringlist>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>deformableParamsInputFilepath</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="QCheckBox" name="loadAffineCheckBox">
+        <property name="text">
+         <string>Affine</string>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QCheckBox" name="loadDeformableCheckBox">
+        <property name="text">
+         <string>Deformable</string>
+        </property>
+        <property name="checked">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="ctkCollapsibleButton" name="advancedParamsCollapsibleButton">
      <property name="text">
       <string>Parameters</string>
+     </property>
+     <property name="collapsed">
+      <bool>true</bool>
      </property>
      <layout class="QFormLayout" name="formLayout_4">
       <property name="verticalSpacing">
@@ -277,6 +351,9 @@
       </item>
       <item row="0" column="1">
        <widget class="qMRMLNodeComboBox" name="outputVolumeSelector">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
         <property name="toolTip">
          <string>(optional) The moving image warped to the fixed image space. NOTE: You must set at least one output object (transform and/or output volume)</string>
         </property>
@@ -305,6 +382,26 @@
         </property>
        </widget>
       </item>
+      <item row="1" column="0">
+       <widget class="QCheckBox" name="saveOutputsCheckBox">
+        <property name="text">
+         <string>Save outputs to folder</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="ctkPathLineEdit" name="outputFolderLineEdit">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="filters">
+         <set>ctkPathLineEdit::Dirs|ctkPathLineEdit::NoDot|ctkPathLineEdit::NoDotDot|ctkPathLineEdit::Readable|ctkPathLineEdit::Writable</set>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>outputFolder</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -329,6 +426,13 @@
      </property>
      <property name="default">
       <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="label_12">
+     <property name="text">
+      <string>Logs:</string>
      </property>
     </widget>
    </item>
@@ -362,6 +466,17 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkPathLineEdit</class>
+   <extends>QWidget</extends>
+   <header>ctkPathLineEdit.h</header>
+  </customwidget>
+  <customwidget>
    <class>qMRMLNodeComboBox</class>
    <extends>QWidget</extends>
    <header>qMRMLNodeComboBox.h</header>
@@ -371,12 +486,6 @@
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>ctkCollapsibleButton</class>
-   <extends>QWidget</extends>
-   <header>ctkCollapsibleButton.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
