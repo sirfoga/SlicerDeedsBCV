@@ -223,7 +223,6 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         else:
             movingVolumeNode = self._parameterNode.movingVolume
             fixedVolumeNode = self._parameterNode.fixedVolume
-            outputVolumeNode = self._parameterNode.outputVolume
 
             affineParamsPath = self._parameterNode.affineParamsInputFilepath
             deformableParamsPath = self._parameterNode.deformableParamsInputFilepath
@@ -245,10 +244,6 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             if fixedVolumeNode == movingVolumeNode:
                 self.disableApplyButton('Fixed and moving volume are the same!')
-                return
-
-            if not outputVolumeNode:
-                self.disableApplyButton('Select an output volume')
                 return
 
             self.enableApplyButton('Register!')

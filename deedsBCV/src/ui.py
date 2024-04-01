@@ -9,7 +9,6 @@ class deedsBCVParameterNode:
 
     movingVolume: vtkMRMLScalarVolumeNode
     fixedVolume: vtkMRMLScalarVolumeNode
-    outputVolume: vtkMRMLScalarVolumeNode
 
     regularisationParameter: float = 1.6
     numLevelsParameter: int = 5

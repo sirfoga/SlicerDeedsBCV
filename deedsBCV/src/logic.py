@@ -35,6 +35,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     MOVING_FILENAME = 'moving'
     FIXED_FILENAME = 'fixed'
     OUTPUT_FOLDER = 'outputs'
+    PREDICTION_BASENAME = 'pred'
 
     def __init__(self) -> None:
         """
@@ -159,7 +160,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         cli_args = [
             '-F', fixed_path,
             '-M', moving_path,
-            '-O', str(out_folder / 'pred'),
+            '-O', str(out_folder / self.PREDICTION_BASENAME),
             '-a', '{:.3f}'.format(regularisationParameter),
             '-l', '{:d}'.format(numLevelsParameter),
             '-G', _build_stepped_param(gridSpacingParameter, numLevelsParameter),
@@ -175,7 +176,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         process = create_sub_process(exe_path, cli_args)
         self._handleProcess(process, to_stdout=True)
 
-        return out_folder  # output basename path
+        return str(out_folder / self.PREDICTION_BASENAME) + '{}.nii.gz'.format('deformed')
 
     # todo def run_apply_exe(self, moving_path, fixed_path, deformable_path, affine_path=None)
 
@@ -185,12 +186,10 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     def processParameterNode(self, parameterNode, deleteTemporaryFiles):
         fixedVolumeNode = parameterNode.fixedVolume
         movingVolumeNode = parameterNode.movingVolume
-        outputVolumeNode = parameterNode.outputVolume
 
         self.process(
             fixedVolumeNode,
             movingVolumeNode,
-            outputVolumeNode,
             load_result=(
                 None if len(str(parameterNode.affineParamsInputFilepath)) < 4 else parameterNode.affineParamsInputFilepath,
                 None if len(str(parameterNode.deformableParamsInputFilepath)) < 4 else parameterNode.deformableParamsInputFilepath
@@ -210,7 +209,6 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     def process(self,
                 fixedVolumeNode: vtkMRMLScalarVolumeNode,
                 movingVolumeNode: vtkMRMLScalarVolumeNode,
-                outputVolumeNode: vtkMRMLScalarVolumeNode,
                 load_result=(None, None),
                 alsoAffineStep: bool = True,
                 advancedParams: tuple[float] = (1.60, 5, 8, 8, 5),
@@ -225,19 +223,10 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         tempDir = create_tmp_folder()
         self.add_log('Registration is started in {}'.format(tempDir))
 
-        self.cancelRequested = False
-        affine_path, pred_path = self._process_or_except(
-            tempDir,
-            fixedVolumeNode,
-            movingVolumeNode,
-            load_result,
-            alsoAffineStep,
-            advancedParams,
-        )  # debug only to except
-
         try:
             self.cancelRequested = False
-            affine_path, pred_path = self._process_or_except(
+
+            _, pred_path = self._process_or_except(
                 tempDir,
                 fixedVolumeNode,
                 movingVolumeNode,
@@ -247,9 +236,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             )
 
             self._post_process_or_except(
-                tempDir,
-                affine_path, pred_path,
-                fixedVolumeNode, movingVolumeNode, outputVolumeNode,
+                tempDir, pred_path, fixedVolumeNode, movingVolumeNode
             )
 
             if not (output_folder is None):  # this folder is already existing
@@ -307,12 +294,12 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         for file_name in [
             '{}.nii.gz'.format(self.FIXED_FILENAME),
             '{}.nii.gz'.format(self.MOVING_FILENAME),
-            'pred_deformed.nii.gz',
+            '{}_{}.nii.gz'.format(self.PREDICTION_BASENAME, 'deformed'),
             'affine_matrix.txt'
         ]:
             file_path = Path(working_folder) / file_name
             if not file_path.exists():
-                file_path = Path(working_folder) / 'outputs' / file_name  # try in outputs folder
+                file_path = Path(working_folder) / self.OUTPUT_FOLDER / file_name  # try in outputs folder
 
             if file_path.exists():
                 shutil.copy(
@@ -351,27 +338,31 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         return fixed_path, moving_path
 
-    def _load_and_display(self, file_path, ui_node):
-        loadedOutputVolumeNode = slicer.util.loadVolume(file_path)
-        ui_node.SetAndObserveImageData(loadedOutputVolumeNode.GetImageData())
+    def _load2node(self, file_path, ui_node=None):
+        loadedNode = slicer.util.loadVolume(file_path)
 
-    def _post_process_or_except(self,
-                tempDir,
-                affine_path, pred_path,
-                fixedVolumeNode, movingVolumeNode, outputVolumeNode):
+        if not (ui_node is None):
+            ui_node.SetAndObserveImageData(loadedNode.GetImageData())
+
+    def _post_process_or_except(self, tempDir, pred_path, fixedVolumeNode, movingVolumeNode):
         """ parse outputs, save them, and, if possible, show them"""
 
         self.add_log('Reloading volumes...')
 
-        self._load_and_display(
+        self._load2node(
             os.path.join(tempDir, '{}.nii.gz'.format(self.FIXED_FILENAME)),
             fixedVolumeNode
         )
-        self._load_and_display(
+        self._load2node(
             os.path.join(tempDir, '{}.nii.gz'.format(self.MOVING_FILENAME)),
             movingVolumeNode
         )
-        self._load_and_display(
-            str(pred_path) + '_deformed.nii.gz',
-            outputVolumeNode
-        )
+
+        properties = {
+            'name': 'moved',
+            'singleFile': True,
+            'discardOrientation': False,  # liver on bottom-left
+            'autoWindowLevel': False,  # don't even need if using pre-processed data
+            'show': True
+        }
+        slicer.util.loadVolume(pred_path, properties=properties)  # no node required
