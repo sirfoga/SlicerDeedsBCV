@@ -5,9 +5,17 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from typing import Optional
 from pathlib import Path
+import os
 
 from src.logic import deedsBCVLogic as Logic
 from src.ui import deedsBCVParameterNode
+
+
+def load2node(file_path, ui_node=None):
+    loadedNode = slicer.util.loadVolume(file_path)
+
+    if not (ui_node is None):
+        ui_node.SetAndObserveImageData(loadedNode.GetImageData())
 
 
 class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
@@ -189,18 +197,39 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if not self.ui.saveOutputsCheckBox.checked:
             self._parameterNode.outputFolder = Path('')
 
-        self.logic.processParameterNode(
+        tempDir, pred_path = self.logic._processParameterNode(
             self._parameterNode,
             deleteTemporaryFiles=False,
             #deprecated, of course log! logToStdout=True
         )
 
-    def onLogicSuccess(self):
-        """ Apply computed transform to moving volume if output transform is computed to immediately see registration results """
+        if not (pred_path is None):
+            self._post_process_or_except(
+                tempDir, pred_path
+            )
 
-        movingVolumeNode = self.ui.movingVolumeSelector.currentNode()
-        # todo get ouput (moved) from logic and display
-        # get affine (rigid) (+ deformable) trans from logic and save in the Save folder
+    def _post_process_or_except(self, tempDir, pred_path):
+        """ parse outputs, save them, and, if possible, show them"""
+
+        fixedVolumeNode, movingVolumeNode = self._parameterNode.fixedVolume, self._parameterNode.movingVolume
+
+        load2node(
+            os.path.join(tempDir, '{}.nii.gz'.format(self.FIXED_FILENAME)),
+            fixedVolumeNode
+        )
+        load2node(
+            os.path.join(tempDir, '{}.nii.gz'.format(self.MOVING_FILENAME)),
+            movingVolumeNode
+        )
+
+        properties = {
+            'name': 'moved',
+            'singleFile': True,
+            'discardOrientation': False,  # liver on bottom-left
+            'autoWindowLevel': False,  # don't even need if using pre-processed data
+            'show': True
+        }
+        slicer.util.loadVolume(pred_path, properties=properties)  # no node required
 
     def setStateApplyButton(self, enabled, text=None):
         if not (text is None):

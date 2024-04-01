@@ -1,5 +1,6 @@
 import qt
 import platform
+import nibabel as nib
 
 import slicer
 from slicer.ScriptedLoadableModule import *
@@ -82,3 +83,12 @@ def create_sub_process(executableFilePath, cmdLineArguments):
         startupinfo=get_os_info()
         #todo? shell=False
     )
+
+
+def np2nifty(x, out_path, affine=np.eye(4)):
+    img = nib.Nifti1Image(
+        x.swapaxes(0, 2),
+        affine=affine
+    )
+
+    return nib.save(img, out_path)

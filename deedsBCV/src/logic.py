@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import platform
 import logging
 import shutil
@@ -7,19 +8,9 @@ import subprocess
 
 import slicer
 from slicer.ScriptedLoadableModule import *
-from slicer import vtkMRMLScalarVolumeNode
 
-from src.utils import create_tmp_folder, pad_smaller_along_depth, create_sub_process
+from src.utils import create_tmp_folder, np2nifty, pad_smaller_along_depth, create_sub_process
 from src.ui import deedsBCVParameterNode
-
-
-def exportNode(node, folder, filename):
-    """ todo in nii.gz! """
-
-    filePath = os.path.join(folder, filename)
-    slicer.util.exportNode(node, filePath)
-
-    return filePath
 
 
 class deedsBCVLogic(ScriptedLoadableModuleLogic):
@@ -52,7 +43,6 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         executableExt = '.exe' if platform.system() == 'Windows' else ''
         self.linearExeFilename = 'linear' + executableExt
-        #todo deformable
 
     def set_default_parameters(self, parameterNode):
         """
@@ -92,7 +82,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         # save process output (if not logged) so that it can be displayed in case of an error
         processOutput = ''
 
-        while True:  # todo scary
+        while True:  # scary
             try:
                 stdout_line = process.stdout.readline()
                 if not stdout_line:
@@ -127,8 +117,6 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             raise subprocess.CalledProcessError(return_code, 'deeds')
 
     def run_linear_exe(self, moving_path, fixed_path, out_folder, advanced_params=None):
-        """ output matrix will be on fixed volume's folder; todo parse `advancedParams` """
-
         affine_path = os.path.join(out_folder, 'affine')
         regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params
         # todo use them!
@@ -176,20 +164,25 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         process = create_sub_process(exe_path, cli_args)
         self._handleProcess(process, to_stdout=True)
 
-        return str(out_folder / self.PREDICTION_BASENAME) + '{}.nii.gz'.format('deformed')
-
-    # todo def run_apply_exe(self, moving_path, fixed_path, deformable_path, affine_path=None)
+        return str(out_folder / self.PREDICTION_BASENAME) + '{}.nii.gz'.format('deformed')  # full path, e.g ...outputs/pred_deformed.nii.gz
 
     def getParameterNode(self):
         return deedsBCVParameterNode(super().getParameterNode())
 
-    def processParameterNode(self, parameterNode, deleteTemporaryFiles):
-        fixedVolumeNode = parameterNode.fixedVolume
-        movingVolumeNode = parameterNode.movingVolume
+    def _processParameterNode(self, parameterNode, deleteTemporaryFiles):
+        if parameterNode.fixedVolume is None:
+            fixed_arr = slicer.util.arrayFromVolume(parameterNode.fixedVolume)
+            fixed_header = None  #todo get also header!
+        else:
+            fixed_arr = None
+            fixed_header = None
+
+        moving_arr = slicer.util.arrayFromVolume(parameterNode.movingVolume)
+        moving_header = None  #todo
 
         self.process(
-            fixedVolumeNode,
-            movingVolumeNode,
+            (fixed_arr, fixed_header),
+            (moving_arr, moving_header),
             load_result=(
                 None if len(str(parameterNode.affineParamsInputFilepath)) < 4 else parameterNode.affineParamsInputFilepath,
                 None if len(str(parameterNode.deformableParamsInputFilepath)) < 4 else parameterNode.deformableParamsInputFilepath
@@ -207,8 +200,8 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         )
 
     def process(self,
-                fixedVolumeNode: vtkMRMLScalarVolumeNode,
-                movingVolumeNode: vtkMRMLScalarVolumeNode,
+                fixed: tuple[np.array, None],  #todo header]
+                moving: tuple[np.array, None],  #todo header]
                 load_result=(None, None),
                 alsoAffineStep: bool = True,
                 advancedParams: tuple[float] = (1.60, 5, 8, 8, 5),
@@ -228,20 +221,17 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
             _, pred_path = self._process_or_except(
                 tempDir,
-                fixedVolumeNode,
-                movingVolumeNode,
+                fixed,
+                moving,
                 load_result,
                 alsoAffineStep,
                 advancedParams,
             )
 
-            self._post_process_or_except(
-                tempDir, pred_path, fixedVolumeNode, movingVolumeNode
-            )
-
             if not (output_folder is None):  # this folder is already existing
                 self.save_to_output_folder(tempDir, Path(output_folder), advancedParams)
         except Exception as e:
+            pred_path = None
             self.add_log('Registration failed! {}'.format(str(e)))
         finally:
             if deleteTemporaryFiles:
@@ -250,16 +240,16 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             self.isRunning = False
             self.cancelRequested = False
 
+        return tempDir, pred_path
+
     def _process_or_except(self,
                 tempDir,
-                fixedVolumeNode,
-                movingVolumeNode,
+                fixed,
+                moving,
                 load_result,
                 alsoAffineStep,
                 advancedParams) -> None:
-        fixed_path, moving_path = self._prepareInput(
-            tempDir, fixedVolumeNode, movingVolumeNode
-        )
+        fixed_path, moving_path = self._pre_process(tempDir, fixed, moving)
 
         out_folder = Path(tempDir, self.OUTPUT_FOLDER)
         out_folder.mkdir(parents=True, exist_ok=True)
@@ -286,6 +276,8 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         if self.cancelRequested:
             raise ValueError('User requested cancel!')
+
+        # todo change affine header of moved (pred_path) to fixed's (fixed_path) or moving's (moving_path)
 
         self.add_log('Done :)')
         return affine_path, pred_path
@@ -315,54 +307,20 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 advancedParams,
             )))
 
-    def _prepareInput(self, folder, fixed_node, moving_node):
+    def _pre_process(self, folder, fixed, moving):
         """ pad smaller input, and save as .nii.gz """
 
         self.add_log('Pre-processing...')
 
-        #todo check if fixed is None (can be since moving with pre-calc results)
+        fixed_arr, fixed_header = fixed
+        moving_arr, moving_header = moving
 
-        fixed_np = slicer.util.arrayFromVolume(fixed_node)
-        moving_np = slicer.util.arrayFromVolume(moving_node)
+        #todo check if fixed is None (can be if using pre-calc results)
 
-        fixed_np, moving_np = pad_smaller_along_depth(fixed_np, moving_np)
+        fixed_arr, moving_arr = pad_smaller_along_depth(fixed_arr, moving_arr)
+        fixed_path, moving_path = os.path.join(folder, '{}.nii.gz'.format(self.FIXED_FILENAME)), os.path.join(folder, '{}.nii.gz'.format(self.MOVING_FILENAME))
 
-        # update nodes, and export them
-        slicer.util.updateVolumeFromArray(fixed_node, fixed_np)
-        fixed_path = os.path.join(folder, '{}.nii.gz'.format(self.FIXED_FILENAME))
-        slicer.util.exportNode(fixed_node, fixed_path)
-
-        slicer.util.updateVolumeFromArray(moving_node, moving_np)
-        moving_path = os.path.join(folder, '{}.nii.gz'.format(self.MOVING_FILENAME))
-        slicer.util.exportNode(moving_node, moving_path)
+        np2nifty(fixed_arr, fixed_path, affine=fixed_header)
+        np2nifty(moving_arr, moving_path, affine=moving_header)
 
         return fixed_path, moving_path
-
-    def _load2node(self, file_path, ui_node=None):
-        loadedNode = slicer.util.loadVolume(file_path)
-
-        if not (ui_node is None):
-            ui_node.SetAndObserveImageData(loadedNode.GetImageData())
-
-    def _post_process_or_except(self, tempDir, pred_path, fixedVolumeNode, movingVolumeNode):
-        """ parse outputs, save them, and, if possible, show them"""
-
-        self.add_log('Reloading volumes...')
-
-        self._load2node(
-            os.path.join(tempDir, '{}.nii.gz'.format(self.FIXED_FILENAME)),
-            fixedVolumeNode
-        )
-        self._load2node(
-            os.path.join(tempDir, '{}.nii.gz'.format(self.MOVING_FILENAME)),
-            movingVolumeNode
-        )
-
-        properties = {
-            'name': 'moved',
-            'singleFile': True,
-            'discardOrientation': False,  # liver on bottom-left
-            'autoWindowLevel': False,  # don't even need if using pre-processed data
-            'show': True
-        }
-        slicer.util.loadVolume(pred_path, properties=properties)  # no node required
