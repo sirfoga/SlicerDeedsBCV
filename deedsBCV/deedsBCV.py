@@ -1,6 +1,7 @@
 from slicer.ScriptedLoadableModule import *
 
 from src.widget import deedsBCVWidget  # else 'Warning, there is no UI for the module "deedsBCV"' ..
+from src.logic import deedsBCVLogic
 
 
 class deedsBCV(ScriptedLoadableModule):

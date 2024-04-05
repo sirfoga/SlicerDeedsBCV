@@ -4,7 +4,7 @@ project(SlicerDeedsBCV)
 
 #-----------------------------------------------------------------------------
 # Extension meta-information
-set(EXTENSION_HOMEPAGE "github.com/sirfoga/SlicerDeedsBCV.git")
+set(EXTENSION_HOMEPAGE "https://github.com/sirfoga/SlicerDeedsBCV.git")
 set(EXTENSION_CATEGORY "Registration")
 set(EXTENSION_CONTRIBUTORS "Stefano Fogarollo (IGS, Innsbruck University)")
 set(EXTENSION_DESCRIPTION "This extension makes available deedsBCV in Slicer.")
