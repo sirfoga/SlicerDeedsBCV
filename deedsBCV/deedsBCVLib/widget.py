@@ -1,14 +1,13 @@
 import vtk
 import qt
 import slicer
-from slicer.ScriptedLoadableModule import *
+from slicer.ScriptedLoadableModule import ScriptedLoadableModuleWidget
 from slicer.util import VTKObservationMixin
 from typing import Optional
 from pathlib import Path
-import os
 
-from src.logic import deedsBCVLogic as Logic
-from src.ui import deedsBCVParameterNode
+from deedsBCVLib.logic import deedsBCVLogic as Logic
+from deedsBCVLib.ui import deedsBCVParameterNode
 
 
 def load2node(file_path, ui_node=None):
@@ -47,14 +46,9 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._setupLogic()
         self._setupUI()
 
-        self.isSingleModuleShown = False
-        slicer.util.mainWindow().setWindowTitle('Liver registration')
-        self._show_single_module(True)
-
         self._setup_shortcuts()
         self._setup_connections()
 
-        # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
     def _setupLogic(self) -> None:
@@ -69,6 +63,10 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
+
+        self.isSingleModuleShown = False
+        slicer.util.mainWindow().setWindowTitle('Liver registration')
+        self._show_single_module(True)
 
     def _setup_connections(self) -> None:
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
@@ -97,10 +95,6 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.isSingleModuleShown = singleModule
 
         if singleModule:
-            # We hide all toolbars, etc. which is inconvenient as a default startup setting,
-            # therefore disable saving of window setup.
-
-            import qt
             settings = qt.QSettings()
             settings.setValue('MainWindow/RestoreGeometry', 'false')
 
@@ -111,6 +105,7 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.util.setToolbarsVisible(not singleModule, keepToolbars)
 
         slicer.util.setMenuBarsVisible(not singleModule)
+        slicer.util.setDataProbeVisible(not singleModule)
         slicer.util.setApplicationLogoVisible(not singleModule)
         slicer.util.setModuleHelpSectionVisible(not singleModule)
         slicer.util.setModulePanelTitleVisible(not singleModule)
@@ -182,10 +177,6 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     self.registrationInProgress = False
 
         self._updateApplyButtonState()
-
-    def getUIProperty(self, key, prop):
-        widget = getattr(self.ui, key)
-        return getattr(widget, prop)
 
     def runLogicOrExcept(self):
         if not self.ui.loadAffineCheckBox.checked:

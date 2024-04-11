@@ -9,8 +9,8 @@ import subprocess
 import slicer
 from slicer.ScriptedLoadableModule import *
 
-from src.utils import create_tmp_folder, np2nifty, pad_smaller_along_depth, create_sub_process
-from src.ui import deedsBCVParameterNode
+from deedsBCVLib.utils import create_tmp_folder, np2nifty, pad_smaller_along_depth, create_sub_process
+from deedsBCVLib.ui import deedsBCVParameterNode
 
 
 class deedsBCVLogic(ScriptedLoadableModuleLogic):
@@ -116,10 +116,9 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
             raise subprocess.CalledProcessError(return_code, 'deeds')
 
-    def run_linear_exe(self, moving_path, fixed_path, out_folder, advanced_params=None):
+    def run_linear_exe(self, moving_path, fixed_path, out_folder, advanced_params=(1.60, 5, 8, 8, 5)):
         affine_path = os.path.join(out_folder, 'affine')
-        regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params
-        # todo use them!
+        # todo use them! regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params
 
         cli_args = [
             '-F', fixed_path,
@@ -132,7 +131,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         return affine_path + '_matrix.txt'  # deeds will append this
 
-    def run_deformable_exe(self, moving_path, fixed_path, affine_path=None, advanced_params=None):
+    def run_deformable_exe(self, moving_path, fixed_path, affine_path=None, advanced_params=(1.60, 5, 8, 8, 5)):
         def _build_stepped_param(init_value, n_steps):
             out = [
                 init_value - i  # decrease by 1 each level

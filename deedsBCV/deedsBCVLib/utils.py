@@ -73,7 +73,6 @@ def get_os_info():
 
 def create_sub_process(executableFilePath, cmdLineArguments):
     full_command = [executableFilePath] + cmdLineArguments
-    print(executableFilePath, cmdLineArguments)
 
     return subprocess.Popen(
         full_command,

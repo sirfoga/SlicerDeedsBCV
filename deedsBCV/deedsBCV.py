@@ -1,7 +1,7 @@
-from slicer.ScriptedLoadableModule import *
+from slicer.ScriptedLoadableModule import ScriptedLoadableModule
 
-from src.widget import deedsBCVWidget  # else 'Warning, there is no UI for the module "deedsBCV"' ..
-from src.logic import deedsBCVLogic
+from deedsBCVLib.widget import deedsBCVWidget  # else 'Warning, there is no UI for the module "deedsBCV"' ..
+from deedsBCVLib.logic import deedsBCVLogic
 
 
 class deedsBCV(ScriptedLoadableModule):
@@ -18,4 +18,4 @@ class deedsBCV(ScriptedLoadableModule):
 
         self.parent.helpText = """Register two medical volumes with DEEDS. See original implementation <a href="https://github.com/mattiaspaul/deedsBCV">here</a>."""
 
-        self.parent.acknowledgementText = """This file was originally developed by Stefano Fogarollo and Matthias Harders (IGS, UIBK), and was partially funded by FWF, project DOC 110."""
+        self.parent.acknowledgementText = """We would like to acknowledge the FWF doc.funds Ph.D. program Image-Guided Diagnosis and Therapy (IGDT) at the Medical University of Innsbruck in which Stefano is enrolled."""
