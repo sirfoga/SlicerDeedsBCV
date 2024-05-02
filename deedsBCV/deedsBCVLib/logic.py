@@ -116,22 +116,25 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
             raise subprocess.CalledProcessError(return_code, 'deeds')
 
-    def run_linear_exe(self, moving_path, fixed_path, out_folder, advanced_params=(1.60, 5, 8, 8, 5)):
-        affine_path = os.path.join(out_folder, 'affine')
-        # todo use them! regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params
+    def create_linear_exe(self, moving_path, fixed_path, out_folder, advanced_params=(1.60, 5, 8, 8, 5)):
+        """ todo use advanced_params: regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params """
 
+        affine_path = os.path.join(out_folder, 'affine')
         cli_args = [
             '-F', fixed_path,
             '-M', moving_path,
             '-O', affine_path
         ]
         exe_path = os.path.join(self.get_bin_folder(), 'linear')
-        process = create_sub_process(exe_path, cli_args)
+        return create_sub_process(exe_path, cli_args), affine_path
+
+    def run_linear_exe(self, moving_path, fixed_path, out_folder, advanced_params=(1.60, 5, 8, 8, 5)):
+        process, affine_path = self.create_linear_exe(moving_path, fixed_path, out_folder, advanced_params)
         self._handleProcess(process, to_stdout=True)
 
         return affine_path + '_matrix.txt'  # deeds will append this
 
-    def run_deformable_exe(self, moving_path, fixed_path, affine_path=None, advanced_params=(1.60, 5, 8, 8, 5)):
+    def create_deformable_exe(self, moving_path, fixed_path, affine_path=None, advanced_params=(1.60, 5, 8, 8, 5)):
         def _build_stepped_param(init_value, n_steps):
             out = [
                 init_value - i  # decrease by 1 each level
@@ -160,10 +163,13 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
             ]
 
         exe_path = os.path.join(self.get_bin_folder(), 'deeds')
-        process = create_sub_process(exe_path, cli_args)
+        return create_sub_process(exe_path, cli_args), out_folder
+
+    def run_deformable_exe(self, moving_path, fixed_path, affine_path=None, advanced_params=(1.60, 5, 8, 8, 5)):
+        process, out_folder = self.create_deformable_exe(moving_path, fixed_path, affine_path, advanced_params)
         self._handleProcess(process, to_stdout=True)
 
-        return str(out_folder / self.PREDICTION_BASENAME) + '{}.nii.gz'.format('deformed')  # full path, e.g ...outputs/pred_deformed.nii.gz
+        return str(out_folder / self.PREDICTION_BASENAME) + '_{}.nii.gz'.format('deformed')  # full path, e.g ...outputs/pred_deformed.nii.gz
 
     def getParameterNode(self):
         return deedsBCVParameterNode(super().getParameterNode())
