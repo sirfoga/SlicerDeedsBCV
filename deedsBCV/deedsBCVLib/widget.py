@@ -1,10 +1,10 @@
-import vtk
+from pathlib import Path
+
 import qt
 import slicer
+import vtk
 from slicer.ScriptedLoadableModule import ScriptedLoadableModuleWidget
 from slicer.util import VTKObservationMixin
-from typing import Optional
-from pathlib import Path
 
 from deedsBCVLib.logic import deedsBCVLogic as Logic
 from deedsBCVLib.ui import deedsBCVParameterNode
@@ -13,7 +13,7 @@ from deedsBCVLib.ui import deedsBCVParameterNode
 def load2node(file_path, ui_node=None):
     loadedNode = slicer.util.loadVolume(file_path)
 
-    if not (ui_node is None):
+    if ui_node is not None:
         ui_node.SetAndObserveImageData(loadedNode.GetImageData())
 
 
@@ -28,7 +28,9 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """
 
         ScriptedLoadableModuleWidget.__init__(self, parent)
-        VTKObservationMixin.__init__(self)  # needed for parameter node observation
+        VTKObservationMixin.__init__(
+            self
+        )  # needed for parameter node observation
 
         self.logic = None
         self.ui = None
@@ -69,24 +71,42 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._show_single_module(True)
 
     def _setup_connections(self) -> None:
-        self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
-        self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+        self.addObserver(
+            slicer.mrmlScene,
+            slicer.mrmlScene.StartCloseEvent,
+            self.onSceneStartClose,
+        )
+        self.addObserver(
+            slicer.mrmlScene,
+            slicer.mrmlScene.EndCloseEvent,
+            self.onSceneEndClose,
+        )
 
         self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
         # toggle file browser
-        self.ui.loadAffineCheckBox.toggled.connect(self._toggleLoadAffineFileBrowser)
+        self.ui.loadAffineCheckBox.toggled.connect(
+            self._toggleLoadAffineFileBrowser
+        )
         self.ui.loadAffineCheckBox.toggled.connect(self._onParameterNodeChange)
 
-        self.ui.loadDeformableCheckBox.toggled.connect(self._toggleLoadDeformableFileBrowser)
-        self.ui.loadDeformableCheckBox.toggled.connect(self._onParameterNodeChange)
+        self.ui.loadDeformableCheckBox.toggled.connect(
+            self._toggleLoadDeformableFileBrowser
+        )
+        self.ui.loadDeformableCheckBox.toggled.connect(
+            self._onParameterNodeChange
+        )
 
-        self.ui.saveOutputsCheckBox.toggled.connect(self._toggleSaveOutputsFileBrowser)
+        self.ui.saveOutputsCheckBox.toggled.connect(
+            self._toggleSaveOutputsFileBrowser
+        )
 
     def _setup_shortcuts(self):
         shortcut = qt.QShortcut(slicer.util.mainWindow())
         shortcut.setKey(qt.QKeySequence('Ctrl+Shift+b'))
-        shortcut.connect('activated()', lambda: self._show_single_module(toggle=True))
+        shortcut.connect(
+            'activated()', lambda: self._show_single_module(toggle=True)
+        )
 
     def _show_single_module(self, singleModule=True, toggle=False):
         if toggle:
@@ -130,7 +150,9 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.saveOutputsCheckBox.checked
         )
 
-    def setParameterNode(self, inputParameterNode: Optional[deedsBCVParameterNode] = None) -> None:
+    def setParameterNode(
+        self, inputParameterNode: deedsBCVParameterNode | None = None
+    ) -> None:
         """
         Set and observe parameter node.
         Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
@@ -142,14 +164,26 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Unobserve previously selected parameter node and add an observer to the newly selected.
         # Changes of parameter node are observed so that whenever parameters are changed by a script or any other module
         # those are reflected immediately in the GUI.
-        if self._parameterNode is not None and self.hasObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange):
+        if self._parameterNode is not None and self.hasObserver(
+            self._parameterNode,
+            vtk.vtkCommand.ModifiedEvent,
+            self._onParameterNodeChange,
+        ):
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange)
+            self.removeObserver(
+                self._parameterNode,
+                vtk.vtkCommand.ModifiedEvent,
+                self._onParameterNodeChange,
+            )
 
         self._parameterNode = inputParameterNode
         if self._parameterNode is not None:
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
-            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange)  # monitor change in GUI
+            self.addObserver(
+                self._parameterNode,
+                vtk.vtkCommand.ModifiedEvent,
+                self._onParameterNodeChange,
+            )  # monitor change in GUI
 
     def _onParameterNodeChange(self, caller=None, event=None):
         if self._parameterNode is None:
@@ -158,13 +192,15 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._updateApplyButtonState()
 
     def onApplyButton(self) -> None:
-        """ Run processing when user clicks "Apply" button. """
+        """Run processing when user clicks "Apply" button."""
 
         if self.registrationInProgress:
             self.logic.cancelRequested = True
             self.registrationInProgress = False
         else:
-            with slicer.util.tryWithErrorDisplay('Failed to compute results.', waitCursor=True):
+            with slicer.util.tryWithErrorDisplay(
+                'Failed to compute results.', waitCursor=True
+            ):
                 self.ui.statusLabel.plainText = ''
 
                 try:
@@ -191,29 +227,27 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         tempDir, pred_path = self.logic._processParameterNode(
             self._parameterNode,
             deleteTemporaryFiles=False,
-            #deprecated, of course log! logToStdout=True
+            # deprecated, of course log! logToStdout=True
         )
 
-        if not (pred_path is None):
-            self._post_process_or_except(
-                tempDir, pred_path
-            )
+        if pred_path is not None:
+            self._post_process_or_except(tempDir, pred_path)
 
     def _post_process_or_except(self, tempDir, pred_path):
-        """ parse outputs, save them, and, if possible, show them"""
+        """parse outputs, save them, and, if possible, show them"""
         properties = {
             'singleFile': True,
             'discardOrientation': False,  # liver on bottom-left
             'autoWindowLevel': False,  # don't even need if using pre-processed data
-            'show': True
+            'show': True,
         }
 
-        fpath = Path(tempDir) / '{}.nii.gz'.format(self.FIXED_FILENAME)
+        fpath = Path(tempDir) / f'{self.FIXED_FILENAME}.nii.gz'
         if fpath.exists():
             properties['name'] = 'fixed pre-processed'
             slicer.util.loadVolume(fpath, properties=properties)
 
-        fpath = Path(tempDir) / '{}.nii.gz'.format(self.MOVING_FILENAME)
+        fpath = Path(tempDir) / f'{self.MOVING_FILENAME}.nii.gz'
         if fpath.exists():
             properties['name'] = 'moving pre-processed'
             slicer.util.loadVolume(fpath, properties=properties)
@@ -224,7 +258,7 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.util.loadVolume(pred_path, properties=properties)
 
     def setStateApplyButton(self, enabled, text=None):
-        if not (text is None):
+        if text is not None:
             self.ui.applyButton.text = text
 
         self.ui.applyButton.enabled = enabled
@@ -246,21 +280,33 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             fixedVolumeNode = self._parameterNode.fixedVolume
 
             affineParamsPath = self._parameterNode.affineParamsInputFilepath
-            deformableParamsPath = self._parameterNode.deformableParamsInputFilepath
+            deformableParamsPath = (
+                self._parameterNode.deformableParamsInputFilepath
+            )
 
             if not movingVolumeNode:
                 self.disableApplyButton('Select at least the moving volume')
                 return
 
-            loading_pre_result = (self.ui.loadAffineCheckBox.checked and len(str(affineParamsPath)) > 4) or (self.ui.loadDeformableCheckBox.checked and len(str(deformableParamsPath)) > 4)
-            computing_result = not(fixedVolumeNode is None)
+            loading_pre_result = (
+                self.ui.loadAffineCheckBox.checked
+                and len(str(affineParamsPath)) > 4
+            ) or (
+                self.ui.loadDeformableCheckBox.checked
+                and len(str(deformableParamsPath)) > 4
+            )
+            computing_result = fixedVolumeNode is not None
 
             if loading_pre_result and computing_result:
-                self.disableApplyButton('Fixed volume is chosen, even if loading from file!')
+                self.disableApplyButton(
+                    'Fixed volume is chosen, even if loading from file!'
+                )
                 return
 
             if (not computing_result) and (not loading_pre_result):
-                self.disableApplyButton('Choose a fixed volume or load from file!')
+                self.disableApplyButton(
+                    'Choose a fixed volume or load from file!'
+                )
                 return
 
             if fixedVolumeNode == movingVolumeNode:
@@ -290,7 +336,11 @@ class deedsBCVWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._onParameterNodeChange)
+            self.removeObserver(
+                self._parameterNode,
+                vtk.vtkCommand.ModifiedEvent,
+                self._onParameterNodeChange,
+            )
 
     def onSceneStartClose(self, caller, event) -> None:
         """

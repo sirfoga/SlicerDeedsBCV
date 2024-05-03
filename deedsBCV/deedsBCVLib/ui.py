@@ -1,11 +1,12 @@
-from slicer.parameterNodeWrapper import *
-from slicer import vtkMRMLScalarVolumeNode
 from pathlib import Path
+
+from slicer import vtkMRMLScalarVolumeNode
+from slicer.parameterNodeWrapper import parameterNodeWrapper
 
 
 @parameterNodeWrapper
 class deedsBCVParameterNode:
-    """ The parameters needed by module. """
+    """The parameters needed by module."""
 
     movingVolume: vtkMRMLScalarVolumeNode
     fixedVolume: vtkMRMLScalarVolumeNode

@@ -1,16 +1,21 @@
-import os
-import numpy as np
-import platform
 import logging
+import os
+import platform
 import shutil
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
+import numpy as np
 import slicer
 from slicer.ScriptedLoadableModule import *
 
-from deedsBCVLib.utils import create_tmp_folder, np2nifty, pad_smaller_along_depth, create_sub_process
 from deedsBCVLib.ui import deedsBCVParameterNode
+from deedsBCVLib.utils import (
+    create_sub_process,
+    create_tmp_folder,
+    np2nifty,
+    pad_smaller_along_depth,
+)
 
 
 class deedsBCVLogic(ScriptedLoadableModuleLogic):
@@ -95,7 +100,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                     self.add_log(stdout_line)
                 else:
                     processOutput += stdout_line + '\n'
-            except UnicodeDecodeError as e:
+            except UnicodeDecodeError:
                 # Probably system locale is set to non-English, we cannot easily capture process output.
                 # Code page conversion happens because `universal_newlines=True` sets process output to text mode.
                 pass
@@ -116,25 +121,41 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
             raise subprocess.CalledProcessError(return_code, 'deeds')
 
-    def create_linear_exe(self, moving_path, fixed_path, out_folder, advanced_params=(1.60, 5, 8, 8, 5)):
-        """ todo use advanced_params: regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params """
+    def create_linear_exe(
+        self,
+        moving_path,
+        fixed_path,
+        out_folder,
+        advanced_params=(1.60, 5, 8, 8, 5),
+    ):
+        """todo use advanced_params: regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params"""
 
         affine_path = os.path.join(out_folder, 'affine')
-        cli_args = [
-            '-F', fixed_path,
-            '-M', moving_path,
-            '-O', affine_path
-        ]
+        cli_args = ['-F', fixed_path, '-M', moving_path, '-O', affine_path]
         exe_path = os.path.join(self.get_bin_folder(), 'linear')
         return create_sub_process(exe_path, cli_args), affine_path
 
-    def run_linear_exe(self, moving_path, fixed_path, out_folder, advanced_params=(1.60, 5, 8, 8, 5)):
-        process, affine_path = self.create_linear_exe(moving_path, fixed_path, out_folder, advanced_params)
+    def run_linear_exe(
+        self,
+        moving_path,
+        fixed_path,
+        out_folder,
+        advanced_params=(1.60, 5, 8, 8, 5),
+    ):
+        process, affine_path = self.create_linear_exe(
+            moving_path, fixed_path, out_folder, advanced_params
+        )
         self._handleProcess(process, to_stdout=True)
 
         return affine_path + '_matrix.txt'  # deeds will append this
 
-    def create_deformable_exe(self, moving_path, fixed_path, affine_path=None, advanced_params=(1.60, 5, 8, 8, 5)):
+    def create_deformable_exe(
+        self,
+        moving_path,
+        fixed_path,
+        affine_path=None,
+        advanced_params=(1.60, 5, 8, 8, 5),
+    ):
         def _build_stepped_param(init_value, n_steps):
             out = [
                 init_value - i  # decrease by 1 each level
@@ -145,31 +166,53 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         out_folder = Path(fixed_path).parents[0] / self.OUTPUT_FOLDER
         out_folder.mkdir(parents=True, exist_ok=True)
 
-        regularisationParameter, numLevelsParameter, gridSpacingParameter, maxSearchRadiusParameter, stepQuantisationParameter = advanced_params
+        (
+            regularisationParameter,
+            numLevelsParameter,
+            gridSpacingParameter,
+            maxSearchRadiusParameter,
+            stepQuantisationParameter,
+        ) = advanced_params
 
         cli_args = [
-            '-F', fixed_path,
-            '-M', moving_path,
-            '-O', str(out_folder / self.PREDICTION_BASENAME),
-            '-a', '{:.3f}'.format(regularisationParameter),
-            '-l', '{:d}'.format(numLevelsParameter),
-            '-G', _build_stepped_param(gridSpacingParameter, numLevelsParameter),
-            '-L', _build_stepped_param(maxSearchRadiusParameter, numLevelsParameter),
-            '-Q', _build_stepped_param(stepQuantisationParameter, numLevelsParameter)
+            '-F',
+            fixed_path,
+            '-M',
+            moving_path,
+            '-O',
+            str(out_folder / self.PREDICTION_BASENAME),
+            '-a',
+            f'{regularisationParameter:.3f}',
+            '-l',
+            f'{numLevelsParameter:d}',
+            '-G',
+            _build_stepped_param(gridSpacingParameter, numLevelsParameter),
+            '-L',
+            _build_stepped_param(maxSearchRadiusParameter, numLevelsParameter),
+            '-Q',
+            _build_stepped_param(stepQuantisationParameter, numLevelsParameter),
         ]
-        if not (affine_path is None):
-            cli_args += [
-                '-A', affine_path
-            ]
+        if affine_path is not None:
+            cli_args += ['-A', affine_path]
 
         exe_path = os.path.join(self.get_bin_folder(), 'deeds')
         return create_sub_process(exe_path, cli_args), out_folder
 
-    def run_deformable_exe(self, moving_path, fixed_path, affine_path=None, advanced_params=(1.60, 5, 8, 8, 5)):
-        process, out_folder = self.create_deformable_exe(moving_path, fixed_path, affine_path, advanced_params)
+    def run_deformable_exe(
+        self,
+        moving_path,
+        fixed_path,
+        affine_path=None,
+        advanced_params=(1.60, 5, 8, 8, 5),
+    ):
+        process, out_folder = self.create_deformable_exe(
+            moving_path, fixed_path, affine_path, advanced_params
+        )
         self._handleProcess(process, to_stdout=True)
 
-        return str(out_folder / self.PREDICTION_BASENAME) + '_{}.nii.gz'.format('deformed')  # full path, e.g ...outputs/pred_deformed.nii.gz
+        return str(out_folder / self.PREDICTION_BASENAME) + '_{}.nii.gz'.format(
+            'deformed'
+        )  # full path, e.g ...outputs/pred_deformed.nii.gz
 
     def getParameterNode(self):
         return deedsBCVParameterNode(super().getParameterNode())
@@ -177,20 +220,24 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
     def _processParameterNode(self, parameterNode, deleteTemporaryFiles):
         if parameterNode.fixedVolume is None:
             fixed_arr = slicer.util.arrayFromVolume(parameterNode.fixedVolume)
-            fixed_header = None  #todo get also header!
+            fixed_header = None  # todo get also header!
         else:
             fixed_arr = None
             fixed_header = None
 
         moving_arr = slicer.util.arrayFromVolume(parameterNode.movingVolume)
-        moving_header = None  #todo
+        moving_header = None  # todo
 
         self.process(
             (fixed_arr, fixed_header),
             (moving_arr, moving_header),
             load_result=(
-                None if len(str(parameterNode.affineParamsInputFilepath)) < 4 else parameterNode.affineParamsInputFilepath,
-                None if len(str(parameterNode.deformableParamsInputFilepath)) < 4 else parameterNode.deformableParamsInputFilepath
+                None
+                if len(str(parameterNode.affineParamsInputFilepath)) < 4
+                else parameterNode.affineParamsInputFilepath,
+                None
+                if len(str(parameterNode.deformableParamsInputFilepath)) < 4
+                else parameterNode.deformableParamsInputFilepath,
             ),
             alsoAffineStep=parameterNode.includeAffineStepParameter,
             advancedParams=(
@@ -198,20 +245,24 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 parameterNode.numLevelsParameter,
                 parameterNode.gridSpacingParameter,
                 parameterNode.maxSearchRadiusParameter,
-                parameterNode.stepQuantisationParameter
+                parameterNode.stepQuantisationParameter,
             ),
-            output_folder=None if len(str(parameterNode.outputFolder)) < 4 else parameterNode.outputFolder,
-            deleteTemporaryFiles=deleteTemporaryFiles
+            output_folder=None
+            if len(str(parameterNode.outputFolder)) < 4
+            else parameterNode.outputFolder,
+            deleteTemporaryFiles=deleteTemporaryFiles,
         )
 
-    def process(self,
-                fixed: tuple[np.array, None],  #todo header]
-                moving: tuple[np.array, None],  #todo header]
-                load_result=(None, None),
-                alsoAffineStep: bool = True,
-                advancedParams: tuple[float] = (1.60, 5, 8, 8, 5),
-                output_folder=None,
-                deleteTemporaryFiles: bool = False) -> None:
+    def process(
+        self,
+        fixed: tuple[np.array, None],  # todo header]
+        moving: tuple[np.array, None],  # todo header]
+        load_result=(None, None),
+        alsoAffineStep: bool = True,
+        advancedParams: tuple[float] = (1.60, 5, 8, 8, 5),
+        output_folder=None,
+        deleteTemporaryFiles: bool = False,
+    ) -> None:
         """
         Run the processing algorithm.
         Can be used without GUI widget.
@@ -219,7 +270,7 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         self.isRunning = True
         tempDir = create_tmp_folder()
-        self.add_log('Registration is started in {}'.format(tempDir))
+        self.add_log(f'Registration is started in {tempDir}')
 
         try:
             self.cancelRequested = False
@@ -233,11 +284,13 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
                 advancedParams,
             )
 
-            if not (output_folder is None):  # this folder is already existing
-                self.save_to_output_folder(tempDir, Path(output_folder), advancedParams)
+            if output_folder is not None:  # this folder is already existing
+                self.save_to_output_folder(
+                    tempDir, Path(output_folder), advancedParams
+                )
         except Exception as e:
             pred_path = None
-            self.add_log('Registration failed! {}'.format(str(e)))
+            self.add_log(f'Registration failed! {str(e)}')
         finally:
             if deleteTemporaryFiles:
                 shutil.rmtree(tempDir)
@@ -247,27 +300,40 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
 
         return tempDir, pred_path
 
-    def _process_or_except(self,
-                tempDir,
-                fixed,
-                moving,
-                load_result,
-                alsoAffineStep,
-                advancedParams) -> None:
+    def _process_or_except(
+        self,
+        tempDir,
+        fixed,
+        moving,
+        load_result,
+        alsoAffineStep,
+        advancedParams,
+    ) -> None:
         fixed_path, moving_path = self._pre_process(tempDir, fixed, moving)
 
         out_folder = Path(tempDir, self.OUTPUT_FOLDER)
         out_folder.mkdir(parents=True, exist_ok=True)
 
         affineParamsInputFilepath, deformableParamsInputFilepath = load_result
-        use_affine_from_file = not (affineParamsInputFilepath is None) and len(affineParamsInputFilepath) > 4
-        use_deformable_from_file = not (deformableParamsInputFilepath is None) and len(deformableParamsInputFilepath) > 4
+        use_affine_from_file = (
+            affineParamsInputFilepath is not None
+            and len(affineParamsInputFilepath) > 4
+        )
+        use_deformable_from_file = (
+            deformableParamsInputFilepath is not None
+            and len(deformableParamsInputFilepath) > 4
+        )
 
         if use_affine_from_file:
             affine_path = affineParamsInputFilepath  # todo run affine
         else:  # check if this step needs to be done
             if alsoAffineStep:
-                affine_path = self.run_linear_exe(moving_path, fixed_path, str(out_folder), advanced_params=advancedParams)
+                affine_path = self.run_linear_exe(
+                    moving_path,
+                    fixed_path,
+                    str(out_folder),
+                    advanced_params=advancedParams,
+                )
             else:
                 affine_path = None
 
@@ -277,7 +343,12 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         if use_deformable_from_file:
             pred_path = deformableParamsInputFilepath  # todo apply deformable
         else:
-            pred_path = self.run_deformable_exe(moving_path, fixed_path, affine_path, advanced_params=advancedParams)
+            pred_path = self.run_deformable_exe(
+                moving_path,
+                fixed_path,
+                affine_path,
+                advanced_params=advancedParams,
+            )
 
         if self.cancelRequested:
             raise ValueError('User requested cancel!')
@@ -287,43 +358,51 @@ class deedsBCVLogic(ScriptedLoadableModuleLogic):
         self.add_log('Done :)')
         return affine_path, pred_path
 
-    def save_to_output_folder(self, working_folder, output_folder, advancedParams):
+    def save_to_output_folder(
+        self, working_folder, output_folder, advancedParams
+    ):
         for file_name in [
-            '{}.nii.gz'.format(self.FIXED_FILENAME),
-            '{}.nii.gz'.format(self.MOVING_FILENAME),
+            f'{self.FIXED_FILENAME}.nii.gz',
+            f'{self.MOVING_FILENAME}.nii.gz',
             '{}_{}.nii.gz'.format(self.PREDICTION_BASENAME, 'deformed'),
-            'affine_matrix.txt'
+            'affine_matrix.txt',
         ]:
             file_path = Path(working_folder) / file_name
             if not file_path.exists():
-                file_path = Path(working_folder) / self.OUTPUT_FOLDER / file_name  # try in outputs folder
+                file_path = (
+                    Path(working_folder) / self.OUTPUT_FOLDER / file_name
+                )  # try in outputs folder
 
             if file_path.exists():
-                shutil.copy(
-                    file_path,
-                    output_folder / file_name
-                )
+                shutil.copy(file_path, output_folder / file_name)
 
-            self.add_log('Cannot copy {} to output folder!'.format(str(file_path)))
+            self.add_log(f'Cannot copy {str(file_path)} to output folder!')
 
         with open(output_folder / 'params.txt', 'w') as fp:
-            fp.write(','.join(map(
-                lambda x: '{:.5f}'.format(x),
-                advancedParams,
-            )))
+            fp.write(
+                ','.join(
+                    map(
+                        lambda x: f'{x:.5f}',
+                        advancedParams,
+                    )
+                )
+            )
 
     def _pre_process(self, folder, fixed, moving):
-        """ pad smaller input, and save as .nii.gz """
+        """pad smaller input, and save as .nii.gz"""
 
         self.add_log('Pre-processing...')
 
         fixed_arr, fixed_header = fixed
         moving_arr, moving_header = moving
 
-        #todo check if fixed is None (can be if using pre-calc results)
+        # todo check if fixed is None (can be if using pre-calc results)
 
         fixed_arr, moving_arr = pad_smaller_along_depth(fixed_arr, moving_arr)
-        fixed_path, moving_path = os.path.join(folder, '{}.nii.gz'.format(self.FIXED_FILENAME)), os.path.join(folder, '{}.nii.gz'.format(self.MOVING_FILENAME))
+        fixed_path, moving_path = (
+            os.path.join(folder, f'{self.FIXED_FILENAME}.nii.gz'),
+            os.path.join(folder, f'{self.MOVING_FILENAME}.nii.gz'),
+        )
 
         np2nifty(fixed_arr, fixed_path, affine=fixed_header)
         np2nifty(moving_arr, moving_path, affine=moving_header)

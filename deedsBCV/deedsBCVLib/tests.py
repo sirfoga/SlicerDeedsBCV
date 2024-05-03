@@ -10,18 +10,16 @@ class deedsBCVTest(ScriptedLoadableModuleTest):
     """
 
     def setUp(self):
-        """ Do whatever is needed to reset the state - typically a scene clear will be enough.
-        """
+        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
         slicer.mrmlScene.Clear()
 
     def runTest(self):
-        """Run as few or as many tests as needed here.
-        """
+        """Run as few or as many tests as needed here."""
         self.setUp()
         self.test_deedsBCV1()
 
     def test_deedsBCV1(self):
-        """ Ideally you should have several levels of tests.  At the lowest level
+        """Ideally you should have several levels of tests.  At the lowest level
         tests should exercise the functionality of the logic with different inputs
         (both valid and invalid).  At higher levels your tests should emulate the
         way the user would interact with your code and confirm that it still works
@@ -32,11 +30,12 @@ class deedsBCVTest(ScriptedLoadableModuleTest):
         your test should break so they know that the feature is needed.
         """
 
-        self.delayDisplay("Starting the test")
+        self.delayDisplay('Starting the test')
 
         # Get/create input data
 
         import SampleData
+
         registerSampleData()
         inputVolume = SampleData.downloadSample('deedsBCV1')
         self.delayDisplay('Loaded test data set')
@@ -45,7 +44,9 @@ class deedsBCVTest(ScriptedLoadableModuleTest):
         self.assertEqual(inputScalarRange[0], 0)
         self.assertEqual(inputScalarRange[1], 695)
 
-        outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
+        outputVolume = slicer.mrmlScene.AddNewNodeByClass(
+            'vtkMRMLScalarVolumeNode'
+        )
         threshold = 100
 
         # Test the module logic

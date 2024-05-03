@@ -1,15 +1,14 @@
-import qt
 import platform
+import subprocess
+
 import nibabel as nib
 
-import slicer
-from slicer.ScriptedLoadableModule import *
-
-import subprocess
 # todo as in https://slicer.readthedocs.io/en/latest/developer_guide/script_repository.html#launch-external-process-in-startup-environment ?
 # from subprocess import check_output
-
 import numpy as np
+import qt
+import slicer
+from slicer.ScriptedLoadableModule import *
 
 
 def create_folder(path):
@@ -24,18 +23,22 @@ def create_tmp_folder():
     file_info = qt.QFileInfo(qt.QDir(tmp_dir), 'deedsBCV')
     tmp_dir = qt.QDir(create_folder(file_info.absoluteFilePath()))
 
-    temp_dir_name = qt.QDateTime().currentDateTime().toString('yyyyMMdd_hhmmss_zzz')
+    temp_dir_name = (
+        qt.QDateTime().currentDateTime().toString('yyyyMMdd_hhmmss_zzz')
+    )
     file_info = qt.QFileInfo(qt.QDir(tmp_dir), temp_dir_name)
     return create_folder(file_info.absoluteFilePath())
 
 
 def pad_smaller_along_depth(fixed_np, moving_np, value='min'):
-    """ assuming D, H, W ordering """
+    """assuming D, H, W ordering"""
 
     fixed_dimensions = fixed_np.shape
     moving_dimensions = moving_np.shape
 
-    assert fixed_dimensions[1:] == moving_dimensions[1:]  # image dimensions should be the same
+    assert (
+        fixed_dimensions[1:] == moving_dimensions[1:]
+    )  # image dimensions should be the same
 
     fixed_z = fixed_dimensions[0]
     moving_z = moving_dimensions[0]
@@ -50,12 +53,16 @@ def pad_smaller_along_depth(fixed_np, moving_np, value='min'):
             if value == 'min':
                 value = fixed_np.min()
 
-            fixed_np = np.pad(fixed_np, padding, mode='constant', constant_values=value)
+            fixed_np = np.pad(
+                fixed_np, padding, mode='constant', constant_values=value
+            )
         else:
             if value == 'min':
                 value = moving_np.min()
 
-            moving_np = np.pad(moving_np, padding, mode='constant', constant_values=value)
+            moving_np = np.pad(
+                moving_np, padding, mode='constant', constant_values=value
+            )
 
     return fixed_np, moving_np
 
@@ -79,15 +86,12 @@ def create_sub_process(executableFilePath, cmdLineArguments):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         universal_newlines=True,
-        startupinfo=get_os_info()
-        #todo? shell=False
+        startupinfo=get_os_info(),
+        # todo? shell=False
     )
 
 
 def np2nifty(x, out_path, affine=np.eye(4)):
-    img = nib.Nifti1Image(
-        x.swapaxes(0, 2),
-        affine=affine
-    )
+    img = nib.Nifti1Image(x.swapaxes(0, 2), affine=affine)
 
     return nib.save(img, out_path)
